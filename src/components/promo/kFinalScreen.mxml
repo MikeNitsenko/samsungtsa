@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)"
+		 xmlns:Custom="components.Custom.*" xmlns:svcmain="services.svcmain.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Model.ExternalData;
+			
+			import events.Model.ExternalDataEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			import flatspark.enums.ButtonSizeEnum;
+
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var TEXT:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			
+			private var success:Boolean = false;
+			[Bindable] private var pbValue:int = 0;
+			[Bindable] private var pbMax:int = 0;
+			private var zipFileName:String = "";
+			private var path:String = "";
+			private var servletPath:String = "";
+			
+			private var timer:Timer;
+			private var tryCount:int = 0;
+			
+			private var adjArr:ArrayCollection;
+			private var largeAdjustAC:ArrayCollection;
+			private var UPDATE_ARRAY:ArrayCollection;
+			
+			private var SYNC_TYPE:String = "";
+			private var syncCounter:int = 30;
+			
+			private var syncAC:ArrayCollection = new ArrayCollection();
+			private var syncViewCount:Number = 0;
+			private var syncTableName:String = "";
+			private var tempQueryAC:ArrayCollection = new ArrayCollection();
+			private var syncID:String = "";
+			private var tempVisitPhotosAC:ArrayCollection = new ArrayCollection();
+			private var imgNum:int = 0;
+			
+			[Bindable] private var allowEndSurvey:Boolean = false;
+			private var hasConnection:Boolean = true;
+			private var t:Timer = new Timer(1000);
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + imgName).url;
+				
+				arrQuestions.filterFunction = null;
+				arrQuestions.refresh();
+				
+				var adjArr:ArrayCollection = new ArrayCollection();
+
+				for (var i:int=0;i<arrQuestions.length;i++)
+				{
+					var bq:BatchQuery = new BatchQuery();
+					bq.query = "UPDATE ST_SURVEY_RESULTS SET " +
+						"SRS_ANS_VALUE = '" + arrQuestions.getItemAt(i).SRS_ANS_VALUE + "'," +
+						"SRS_ANS_CHECKED = 1," +
+						"SRS_IS_SYNCED = 0 " +
+						" WHERE " +
+						" (SRS_SUR_CODE = " + Globals.SUR_CODE + ") AND " +
+						" (SRS_VIS_NUMBER = '" + VIS_NUMBER + "') AND " +
+						" (SRS_QUE_CODE = " + arrQuestions.getItemAt(i).SRS_QUE_CODE + ") AND " +
+						" (SRS_ANS_CODE = " + arrQuestions.getItemAt(i).ANS_CODE + ") AND " +
+						" (SRS_SAL_CODE = " + Globals.SAL_CODE + ")" +
+						";"
+					adjArr.addItem(bq);
+				}
+				
+				var bq2:BatchQuery = new BatchQuery();
+				bq2.query = "UPDATE ST_VISIT SET VIS_CANCELLED = 0," +
+					" VIS_FAC_CODE = null" + "," +
+					" VIS_FINISH_DATE = '" + 
+					Globals.CurrentDateTimeWithMinutesSecondsString() + 
+					"' WHERE VIS_NUMBER = " +
+					"'" + VIS_NUMBER + "'" + ";";
+				adjArr.addItem(bq2);
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_A_ST_SURVEY_DETAILS_RESULT);
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_A_ST_SURVEY_DETAILS_RESULT, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function SAVE_A_ST_SURVEY_DETAILS_RESULT(e:CheckEvent):void
+			{
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_A_ST_SURVEY_DETAILS_RESULT);
+
+				if (e.data > 0) 
+				{	
+					Dialog.service.toast("Данные сохранены");
+					START_PART_SYNC();
+				}	
+				else	
+				{
+					allowEndSurvey = true;
+					Globals.showOkDialog("Ошибка вставки деталей опроса",e.text);
+					this.txtRes.text = "Для завершения опроса нажмите кнопку 'Завершить опрос'";
+				}
+			}
+
+			private function START_PART_SYNC():void
+			{
+				t = new Timer(1000);
+				t.addEventListener(TimerEvent.TIMER, updateTimer);
+				t.start();
+				
+				writeLog("Начало синхронизации. Авторизация пользователя");
+				// call for IMEI
+				var ed:ExternalData = new ExternalData("get_auth");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, imeiAuthLoaded,false,0,true);
+				ed.getAuth(Globals.USE_IMEI);
+			}			
+			private function imeiAuthLoaded(event:ExternalDataEvent):void
+			{
+				if (event.hasError) {
+					writeLog(event.errorText);
+				} else {					
+					writeLog("Отправка файла лога");
+					sendLogFile();
+				}
+			}
+			/* ===============================================			
+			SEND LOG FILE			
+			=================================================*/	
+			private function sendLogFile():void
+			{
+				var ed:ExternalData = new ExternalData("sync_file_upload");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, sendLogFileHandler, false,0,true);
+				ed.sendLogFile();
+			}
+			private function sendLogFileHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) {
+					writeLog(event.errorText);
+				} else {	
+					try // remove file
+					{
+						File.documentsDirectory.resolvePath("TSA_PROMO/" + event.data.getItemAt(0).FILENAME).deleteFile();
+					} catch (err:Error) { trace(err.getStackTrace()); }
+					
+					writeLog("Запрос статуса синхронизации");
+					getSyncStatus();
+				}
+			}
+			/* ===============================================			
+			GET SYNC STATUS			
+			=================================================*/	
+			private function getSyncStatus():void
+			{
+				var ed:ExternalData = new ExternalData("get_sync_status");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, getSyncStatusHandler, false,0,true);
+				ed.getSyncStatus();
+			}
+			private function getSyncStatusHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) {
+					writeLog(event.errorText);
+				} else {					
+					checkLastSyncStatus((event.data.getItemAt(0).STATUS as String).substr(0,2));
+				}
+			}
+			
+			/* ===============================================			
+			CHECK LAST SYNC STATUS			
+			=================================================*/	
+			private function checkLastSyncStatus(status:String):void
+			{
+				writeLog("Получен статус: " + status);
+				if ((status == "03") || (status == "06")) {
+					prepareUploadSyncData();
+				} else {
+					showServerError(status);
+				}
+			}
+			
+			private function showServerError(status:String):void
+			{
+				Globals.showOkDialog("Синхронизация","Попробуйте просинхронизироваться позже. Статус синхронизации [" + status + "]");
+			}
+			
+			/* ===============================================			
+			PREPARE AND SEND UPLOAD SYNC DATA		
+			=================================================*/	
+			
+			private function prepareUploadSyncData():void
+			{
+				var ed:ExternalData = new ExternalData("sync_file_upload");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, sendUploadSyncFileHandler, false,0,true);
+				ed.sendUploadSyncFile("P");
+			}
+			private function sendUploadSyncFileHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) {
+					writeLog(event.errorText);
+				} else {					
+					sendUnzipToServer(event.data.getItemAt(0).FILENAME);
+				}
+			}
+			
+			/* ===============================================			
+			SEND UNZIP AND WRITE COMMAND TO SERVER		
+			=================================================*/	
+			
+			private function sendUnzipToServer(zipFileName:String):void
+			{
+				writeLog("Отправка команды записи данных в базу");
+				
+				try // remove file
+				{
+					File.documentsDirectory.resolvePath("TSA_PROMO/" + zipFileName).deleteFile();
+				} catch (err:Error) { trace(err.getStackTrace()); }
+				
+				var ed:ExternalData = new ExternalData("write_file_data");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, sendUnzipToServerHandler, false,0,true);
+				ed.sendUnzipAndWrite(zipFileName);
+			}
+			private function sendUnzipToServerHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) 
+				{
+					writeLog(event.errorText);
+				} 
+				else 
+				{
+					writeLog("Отправка данных опроса завершена.\nДля завершения опроса нажмите кнопку [Завершить опрос]");
+					t.stop();
+					counter.visible = false;
+					allowEndSurvey = true;
+				}
+			}
+
+			private function writeLog(message:String):void
+			{
+				txtRes.text = message;
+			}					
+			
+			protected function btnEndSurvey_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new Event("FINISH_PROMO", true, false));	
+			}
+			
+			/* TIMER */
+			// it's good practice to separate event handler from functional method
+			private function updateTimer(evt:TimerEvent):void {
+				display (t.currentCount);
+			}
+			
+			private function display ( count : int ) : void {
+				var minutes : int = count / 60; // divide by 60 to get the minutes
+				var seconds : int = count % 60; // use modulo operator to get the "rest"
+				var min : String = minutes < 10 ? "0" + minutes : "" + minutes; // add leading zero if necessary
+				var sec : String = seconds < 10 ? "0" + seconds : "" + seconds;
+				
+				//counter.text = min+":"+sec; // no need to cast to String if you use "" + something				
+				counter.text = "До окончания синхронизации осталось: " + (30 - seconds).toString() + " сек";
+				if (seconds == 30)
+				{
+					t.stop();
+					writeLog("Для завершения опроса нажмите кнопку [Завершить опрос]");
+					this.txtRes.text = "Для завершения опроса нажмите кнопку 'Завершить опрос'";
+					counter.text = "Завершите опрос";
+					allowEndSurvey = true;
+					Dialog.service.toast("Можете завершить опрос");
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	<s:BitmapImage id="img" scaleMode="stretch" smooth="true" smoothingQuality="high" width="100%" height="100%" />
+	<s:VGroup width="100%" height="85%" gap="0" horizontalAlign="center" verticalAlign="bottom" paddingTop="10" paddingLeft="10" paddingRight="10">			
+			<s:Group width="100%" height="200">
+				<s:Rect width="100%" height="100%" alpha="0.5" radiusX="5" radiusY="5">
+					<s:fill>
+						<s:SolidColor color="0xFFFFFF"/>
+					</s:fill>
+				</s:Rect>
+				<s:VGroup width="100%" height="200" verticalAlign="middle" horizontalAlign="center" paddingLeft="10" paddingRight="10">
+					<s:Label id="txtRes" width="100%" color="#5B5B5B" tabIndex="-1"
+							 textAlign="center"/>
+					<s:HGroup width="100%" height="80" includeInLayout="false" horizontalAlign="center" verticalAlign="middle">
+						<s:BusyIndicator id="bi" visible="false" includeInLayout="false"/>
+					</s:HGroup>
+					
+					<s:Label id="counter" alpha="0.7" fontSize="15" />
+					
+					<components:ButtonIcon id="btnEndSurvey" label="Завершить опрос" width="50%" 
+							  enabled="{allowEndSurvey}"
+							  click="btnEndSurvey_clickHandler(event)"								  
+							  height="{ButtonSizeEnum.Large}" 
+							  brand="{BrandColorEnum.Info}"  />	
+				</s:VGroup>
+			</s:Group>
+	</s:VGroup>	
+	
+</s:Group>

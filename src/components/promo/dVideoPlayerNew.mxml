@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 creationComplete="group1_creationHandler(event)"
+		 activate="group1_activateHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.application.Application;
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.mediaplayer.MediaPlayer;
+			import com.distriqt.extension.mediaplayer.events.MediaPlayerEvent;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			import events.PromoSurveyEvent;
+
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			private var isPlaying:Boolean = false;
+			
+			protected function group1_creationHandler(event:FlexEvent):void
+			{
+				var videoFileName:String = arrQuestions.getItemAt(0)[Globals.QUE_PHOTO_LANG];
+				var f:File = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + videoFileName);
+
+				if ((f.exists) && (f.extension == "mp4"))
+				{
+					if (MediaPlayer.isSupported)
+					{
+						MediaPlayer.service.addEventListener(MediaPlayerEvent.COMPLETE, mediaPlayer_completeHandler );
+						MediaPlayer.service.addEventListener(MediaPlayerEvent.PLAYING, mediaPlayer_generalHandler );
+						MediaPlayer.service.addEventListener(MediaPlayerEvent.PAUSED, mediaPlayer_generalHandler );
+						MediaPlayer.service.addEventListener(MediaPlayerEvent.CLICK, mediaPlayer_generalHandler);
+						MediaPlayer.service.setFullscreen(true);
+						MediaPlayer.service.createPlayer(f.nativePath, 0, 0, 
+															Application.service.device.displayMetrics.screenWidth, 
+															Application.service.device.displayMetrics.screenHeight, 															
+															true, MediaPlayer.CONTROLS_NONE, true ); 
+					}
+				}
+				else
+				{
+					Dialog.service.toast("Видео не загружено: вопрос пропущен");
+					goNext();
+				}
+			}
+			
+			private function mediaPlayer_completeHandler( event:MediaPlayerEvent ):void
+			{
+				trace( "complete:" + event.details );
+				goNext();
+			}
+			
+			private function mediaPlayer_generalHandler( event:MediaPlayerEvent ):void
+			{
+				trace( "event: " + event.type + " :: " + event.details );
+				switch (event.type)
+				{
+					case "mediaplayer:playing" : isPlaying = true;
+						break;
+					case "mediaplayer:paused" : isPlaying = false;
+						break;
+					case "mediaplayer:click" : isPlaying ? MediaPlayer.service.pause() : MediaPlayer.service.play();
+						break;
+					default: MediaPlayer.service.play();
+				}
+			}
+			
+			private function goNext():void
+			{
+				MediaPlayer.service.removePlayer();
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+			}
+
+			
+			protected function group1_activateHandler(event:Event):void
+			{
+				try
+				{
+					MediaPlayer.service.play();
+				} catch (err:Error) { trace("MediaPlayer Error: " + err.getStackTrace()); }
+			}
+			
+		]]>
+	</fx:Script>
+	
+</s:Group>

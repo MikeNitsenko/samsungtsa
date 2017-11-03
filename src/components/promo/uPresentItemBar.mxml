@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:HGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  creationComplete="hgroup1_creationCompleteHandler(event)" 
+		  width="100%"
+		  height="20%">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			[Bindable] public var order:int = 0;
+			[Bindable] public var TEXT:String;
+			[Bindable] public var itemQnt:int = 0;
+			
+			[Bindable] protected var maxValue:int = 0;
+
+			protected function hgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				maxValue = itemQnt;
+			}
+			
+
+			
+			protected function btnPlus_clickHandler(event:MouseEvent):void
+			{
+				itemQnt++;
+			}
+			
+			protected function btnMinus_clickHandler(event:MouseEvent):void
+			{
+				itemQnt--;
+			}
+			
+			
+			
+
+		]]>
+	</fx:Script>
+	
+	<s:Group width="100%" height="90%">
+		<s:Rect width="100%" height="100%" alpha="0.85" radiusX="5" radiusY="5">
+			<s:fill>
+				<s:SolidColor color="0xFFFFFF"/>
+			</s:fill>
+		</s:Rect>
+		<s:HGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingLeft="10">
+			<s:Label text="{TEXT}" color="0x004f94" width="70%" />
+			<s:HGroup id="itemBar" width="30%" height="100%" verticalAlign="middle" gap="10" horizontalAlign="right" paddingRight="20">
+				<s:Button id="btnPlus" 
+						  label="+" 
+						  enabled="{maxValue > itemQnt ? true : false}"
+						  height="70" width="100" 							  
+						  fontWeight="bold" 
+						  color="{Globals.BUTTON_COLOR}" 
+						  chromeColor="{Globals.BUTTON_CHROME_COLOR}"
+						  click="btnPlus_clickHandler(event)"/>	
+				<s:Button id="btnValue" 
+						  enabled="false"
+						  label="{itemQnt.toString()}" 
+						  height="70" width="100" 							  
+						  fontWeight="bold" 
+						  color="{Globals.BUTTON_COLOR}" 
+						  chromeColor="{Globals.BUTTON_CHROME_COLOR}" />
+				<s:Button id="btnMinus" 
+						  label="-" 
+						  enabled="{itemQnt > 0 ? true : false}" 
+						  height="70" width="100" 							  
+						  fontWeight="bold" 
+						  color="{Globals.BUTTON_COLOR}" 
+						  chromeColor="{Globals.BUTTON_CHROME_COLOR}"
+						  click="btnMinus_clickHandler(event)"/>
+			</s:HGroup>
+		</s:HGroup>
+	</s:Group>
+	
+</s:HGroup>

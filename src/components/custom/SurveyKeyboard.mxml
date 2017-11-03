@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:SkinnablePopUpContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+						   xmlns:s="library://ns.adobe.com/flex/spark"
+						   creationComplete="skinnablepopupcontainer1_creationCompleteHandler(event)">
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	<fx:Script>
+		<![CDATA[
+			
+			import mx.events.FlexEvent;
+			
+			[Bindable]
+			public var ANS_TEXT:String = "";
+			
+			[Bindable]
+			public var count:String = "0";
+			
+			protected function skinnablepopupcontainer1_creationCompleteHandler(event:FlexEvent):void
+			{
+				if (ANS_TEXT == "null") 
+				{
+					ANS_TEXT = "";
+				}
+				
+				if (count == "null") 
+				{
+					count = "";
+				}
+				
+				this.width = Math.ceil(Capabilities.screenResolutionX*0.8);
+				this.height = Math.ceil(Capabilities.screenResolutionY*0.5);
+			}
+			
+			
+			protected function btnClose_clickHandler(event:MouseEvent):void
+			{
+				this.close();
+			}
+			
+			private function setValue(increment:int):void
+			{
+				if ((count == "0") || (count == null))
+				{
+					count = increment.toString();
+				}
+				else
+				{
+					count = count + increment.toString();
+				}
+			}
+			
+			
+			
+			// SET VALUE
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				this.close(true,count);			
+			}
+			
+
+			
+			protected function b1_clickHandler(event:MouseEvent):void
+			{
+				setValue(1);
+			}
+			
+			protected function b2_clickHandler(event:MouseEvent):void
+			{
+				setValue(2);
+			}
+			
+			protected function b3_clickHandler(event:MouseEvent):void
+			{
+				setValue(3);
+			}
+			
+			protected function b4_clickHandler(event:MouseEvent):void
+			{
+				setValue(4);
+			}
+			
+			protected function b5_clickHandler(event:MouseEvent):void
+			{
+				setValue(5);
+			}
+			
+			protected function b6_clickHandler(event:MouseEvent):void
+			{
+				setValue(6);
+			}
+			
+			protected function b7_clickHandler(event:MouseEvent):void
+			{
+				setValue(7);
+			}
+			
+			protected function b8_clickHandler(event:MouseEvent):void
+			{
+				setValue(8);
+			}
+			
+			protected function b9_clickHandler(event:MouseEvent):void
+			{
+				setValue(9);
+			}
+			
+			protected function bCE_clickHandler(event:MouseEvent):void
+			{
+				count = "0";
+			}
+			
+			protected function b0_clickHandler(event:MouseEvent):void
+			{
+				setValue(0);
+			}
+			
+			protected function bDel_clickHandler(event:MouseEvent):void
+			{
+				count = count.substr(0, count.toString().length - 1);
+				if (count == "")
+				{
+					count = null;
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:Group width="100%" height="50">
+		<s:Rect width="100%" height="100%" alpha="0.2" topLeftRadiusX="10" topRightRadiusX="10">
+			<s:fill>
+				<s:SolidColor color="0x689AD3"/>
+			</s:fill>
+		</s:Rect>
+		<s:HGroup width="100%" height="100%" horizontalAlign="right" paddingLeft="10"
+				  paddingRight="10" verticalAlign="middle">
+			<s:TextInput id="txtValue" width="50%" prompt="Количество" text="{count.toString()}" editable="false"/>
+		</s:HGroup>
+	</s:Group>
+	<s:HGroup width="100%" height="30" horizontalAlign="right" paddingLeft="10"
+			  verticalAlign="middle">
+		<s:Label width="100%" text="{ANS_TEXT}"/>
+	</s:HGroup>
+	<s:VGroup width="100%" height="100%" gap="10" horizontalAlign="center" verticalAlign="middle">
+		<s:HGroup width="100%" height="60" gap="10" horizontalAlign="center" verticalAlign="middle">
+			<s:Button id="b1" width="120" height="60" label="1" click="b1_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b2" width="120" height="60" label="2" click="b2_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b3" width="120" height="60" label="3" click="b3_clickHandler(event)"
+					  fontSize="20"/>
+		</s:HGroup>
+		<s:HGroup width="100%" height="60" gap="10" horizontalAlign="center" verticalAlign="middle">
+			<s:Button id="b4" width="120" height="60" label="4" click="b4_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b5" width="120" height="60" label="5" click="b5_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b6" width="120" height="60" label="6" click="b6_clickHandler(event)"
+					  fontSize="20"/>
+		</s:HGroup>
+		<s:HGroup width="100%" height="60" gap="10" horizontalAlign="center" verticalAlign="middle">
+			<s:Button id="b7" width="120" height="60" label="7" click="b7_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b8" width="120" height="60" label="8" click="b8_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b9" width="120" height="60" label="9" click="b9_clickHandler(event)"
+					  fontSize="20"/>
+		</s:HGroup>
+		<s:HGroup width="100%" height="60" gap="10" horizontalAlign="center" verticalAlign="middle">
+			<s:Button id="bCE" width="120" height="60" label="CE" click="bCE_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="b0" width="120" height="60" label="0" click="b0_clickHandler(event)"
+					  fontSize="20"/>
+			<s:Button id="bDel" width="120" height="60" label="&lt;&lt;"
+					  click="bDel_clickHandler(event)" fontSize="20"/>
+		</s:HGroup>
+		
+	</s:VGroup>
+	<s:Group width="100%" height="80">
+		<s:Rect width="100%" height="100%" alpha="0.2" topLeftRadiusY="10" topRightRadiusY="10">
+			<s:fill>
+				<s:SolidColor color="0x689AD3"/>
+			</s:fill>
+		</s:Rect>
+		<s:HGroup width="100%" height="100%" paddingBottom="10" paddingLeft="10" paddingRight="10"
+				  paddingTop="10" verticalAlign="middle">
+			<s:HGroup width="100%" height="100%" gap="10" horizontalAlign="center"
+					  verticalAlign="middle">
+				<s:Button id="btnClose" width="50%" height="60" label="Закрыть"
+						  click="btnClose_clickHandler(event)" fontSize="20" fontWeight="normal"/>
+				<s:Button width="50%" height="60" label="Принять" fontSize="20" click="button1_clickHandler(event)"/>
+			</s:HGroup>
+			
+		</s:HGroup>
+	</s:Group>
+</s:SkinnablePopUpContainer>

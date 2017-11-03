@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.application.Application;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			import flatspark.enums.BrandColorEnum;			
+
+			[Bindable] private var ac:ArrayCollection = new ArrayCollection();			
+
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				Globals.readSystemProperties();
+				
+				try
+				{
+					if (Application.isSupported)
+					{						
+						ac = new ArrayCollection([
+							{ITEM_NAME:'Версия приложения', 			ITEM_DESC:Globals.VERSION_NUMBER},
+							{ITEM_NAME:'IMEI код устройства', 			ITEM_DESC:Globals.USE_IMEI},
+							{ITEM_NAME:'Уникальный идентификатор', 		ITEM_DESC:Application.service.device.uniqueId()},
+							{ITEM_NAME:'Модель устройства', 			ITEM_DESC:Application.service.device.model},
+							{ITEM_NAME:'Название операционной системы', ITEM_DESC:Application.service.device.os.name},
+							{ITEM_NAME:'Версия операционной системы', 	ITEM_DESC:Application.service.device.os.version}]);
+					}
+				}
+				catch (e:Error)
+				{
+					trace( "ERROR::" + e.message );
+				}
+			}
+	
+			protected function btnAbout_clickHandler(event:MouseEvent):void
+			{
+				Globals.showOkDialog("О приложении","© ТОО PrimeBridge 2016");
+			}
+			
+			
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="Просмотр системной информации" backVisible="true" />
+	
+	<s:VGroup width="100%" height="100%" gap="0">
+		
+		<s:VGroup width="100%" height="50%" padding="5">
+			<s:Panel title="Системная информация" width="100%" height="100%">
+				<s:List 
+					id="lstSystemProperties"
+					width="100%" height="100%"
+					labelField="ITEM_NAME" 
+					itemRenderer="renderers.SettingsRenderer"					
+					dataProvider="{ac}">
+				</s:List>
+			</s:Panel>	
+		</s:VGroup>			
+
+		<s:VGroup width="100%" height="50%" padding="5">
+			
+			<components:ButtonIcon id="btnUpdateApplication"
+								   label="ОБНОВИТЬ ПРИЛОЖЕНИЕ"
+								   width="100%"
+								   height="25%"
+								   brand="{BrandColorEnum.Primary}"
+								   click="btnAbout_clickHandler(event)" />
+			<components:ButtonIcon id="btnSendDbFile"
+								   label="ОТПРАВИТЬ ФАЙЛ БАЗЫ"
+								   width="100%"
+								   height="25%"
+								   brand="{BrandColorEnum.Danger}"
+								   click="btnAbout_clickHandler(event)" />
+			<components:ButtonIcon id="btnGetSupport"
+								   label="СООБЩЕНИЯ (0)"
+								   width="100%"
+								   height="25%"
+								   brand="{BrandColorEnum.Warning}"
+								   click="btnAbout_clickHandler(event)" />
+			<components:ButtonIcon id="btnAbout"
+								   label="О ПРИЛОЖЕНИИ"
+								   width="100%"
+								   height="25%"
+								   brand="{BrandColorEnum.Default}"
+								   click="btnAbout_clickHandler(event)" />
+		</s:VGroup>
+	</s:VGroup>
+	
+</s:VGroup>

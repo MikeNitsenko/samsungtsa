@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)" 
+		 creationComplete="group1_creationCompleteHandler(event)"
+		 xmlns:Promo="components.promo.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.primebridge.ane.DeleteController;
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			
+			import spark.events.PopUpEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			import events.custom.CheckEvent;
+			
+			import jp.shichiseki.exif.ExifLoader;
+			import jp.shichiseki.exif.IFD;
+			
+			public var VIS_NUMBER:String = "";
+			[Bindable] public var TEXT:String = "";
+			public var imgName:String = "";
+
+			private var camera:CameraUI;
+			private var loader:ExifLoader = new ExifLoader();
+			private var orientation:Number = 0;
+			private var fName:String = "";
+			private var fURL:String = "";
+			private var f:File = new File();
+			
+			[Bindable] private var imgCount:int = 0;
+			[Bindable] private var imgWidth:int = 0;
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			
+			[Bindable] public var QUE_COLOR:uint = 0xFFFFFF;
+			
+			private var ANS_IS_MANDATORY:Boolean = false;
+			[Bindable] private var PICTURE_TAKEN:Boolean = false;
+			
+			private var deleteController:DeleteController = DeleteController.instance;
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + imgName).url;
+				
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+				
+				lblNumWarning.text = arrQuestions.getItemAt(0)[Globals.ANS_TEXT_LANG];
+				
+				imgCount = 0;
+				imgWidth = Math.ceil(FlexGlobals.topLevelApplication.width*0.9);
+				
+				if (arrQuestions.getItemAt(0).SRS_ANS_IS_MANDATORY == 1)
+				{
+					ANS_IS_MANDATORY = true;
+				}
+				
+				if (CameraUI.isSupported)
+				{          
+					camera = new CameraUI();
+					camera.addEventListener(MediaEvent.COMPLETE, onComplete); 					
+				} 
+				else 
+				{
+					Globals.showOkDialog("Ошибка камеры","Камера отсутствует или не поддерживается!");
+				}
+				
+				var photoURL:String = arrQuestions.getItemAt(0).SRS_ANS_VALUE;
+				if ((photoURL == "null") || (photoURL == null))
+				{
+					PICTURE_TAKEN = false;
+				}
+				else
+				{
+					PICTURE_TAKEN = true;
+					imgTaken.source = photoURL;
+				}
+			}
+			
+
+			protected function backHandler(event:NavBarEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{
+				if ((ANS_IS_MANDATORY) && (!PICTURE_TAKEN))
+				{
+					Globals.showOkDialog("Обязательный вопрос","Запрещено переходить к следующему экрану без съемки фото. Пожалуйста, сделайте фото");
+				}
+				else
+				{
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}				
+			}
+
+
+			
+			protected function btnTakePicture_clickHandler(event:MouseEvent):void
+			{
+				if (CameraUI.isSupported)
+				{
+					camera.launch(MediaType.IMAGE);
+				}
+			}
+			
+			private function onComplete(event:MediaEvent):void
+			{
+				PICTURE_TAKEN = true;
+				
+				var mp:MediaPromise = event.data as MediaPromise;
+				mediaPath.text = mp.file.name + "\n" + mp.file.url;
+
+				f = mp.file;
+				fName = mp.file.name;
+				fURL = mp.file.url;
+
+				loader = new ExifLoader();
+				loader.contentLoaderInfo.addEventListener(Event.COMPLETE, showPic);
+				loader.load(new URLRequest(mp.file.url));
+			}
+			
+			private function displayIFD(ifd:IFD):void
+			{
+				for (var entry:String in ifd)
+				{
+					if (entry == "Orientation")
+					{
+						lblOrientation.text = entry + ": " + ifd[entry];
+						orientation = Number(ifd[entry]);
+					}
+				}
+			}
+			
+			private function showPic(event:Event):void
+			{
+				var bigBMD:BitmapData = Bitmap(event.currentTarget.content).bitmapData;
+				bigBMD.draw(loader.content, new Matrix(),null,null,null,true);
+				
+				var maxW:Number = bigBMD.width > bigBMD.height ? bigBMD.width : bigBMD.height;
+				
+				var scale:Number = 640/maxW;
+				var matrix:Matrix = new Matrix();
+				matrix.scale(scale, scale);
+				
+				var smallBMD:BitmapData = new BitmapData(bigBMD.width * scale, bigBMD.height * scale, true, 0x000000);
+				smallBMD.draw(bigBMD, matrix, null, null, null, true);
+				
+				var bitmap:Bitmap = new Bitmap(smallBMD,PixelSnapping.NEVER,true);
+
+				var ba:ByteArray = new ByteArray();
+				smallBMD.encode(smallBMD.rect,new JPEGEncoderOptions,ba);
+
+				var file:File = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + Globals.USE_CODE + "_" + fName);
+				var fs:FileStream = new FileStream();
+				
+				try
+				{
+					fs.open(file,FileMode.WRITE);
+					fs.writeBytes(ba,0,ba.length);
+					fs.close();
+				}
+				catch (err:Error)
+				{
+					mediaPath.text = err.getStackTrace();
+				}	
+				
+				fName = file.name;
+				fURL = file.url;
+				
+				arrQuestions.getItemAt(0).SELECTED = "1";
+				arrQuestions.getItemAt(0).SRS_ANS_VALUE = fURL;
+				
+				deleteController.deleteFile(f.nativePath);
+				
+				imgTaken.visible = true;
+				imgTaken.includeInLayout = true;
+				imgTaken.source = fURL;
+				loader.contentLoaderInfo.removeEventListener(Event.COMPLETE, showPic);
+
+				imgCount++;
+				
+				var adjArr:ArrayCollection = new ArrayCollection();
+				
+				var bq:BatchQuery = new BatchQuery();
+				bq.query = "INSERT INTO ST_VISIT_PHOTO (VIP_VIS_NUMBER, VIP_SAL_ID, VIP_PHOTO_URL, " +
+					"VIP_PHOTO_NAME, VIP_FOLDER_NAME, VIP_PHOTO_DATE, VIP_ACTIVE) " +
+					" " +
+					"VALUES (" +
+					"'" + Globals.SUB_VIS_NUMBER + "', " +
+					"'" + Globals.SAL_ID + "', " +
+					"'" + fURL + "', " + 
+					"'" + fName + "', " +
+					"'" + Globals.USE_CODE + "', " +
+					"'" + Globals.CurrentDateTimeWithMinutesSecondsString() + "', " +
+					"1)"; 
+				adjArr.addItem(bq);
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_A_ST_SURVEY_DETAILS_RESULT );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_A_ST_SURVEY_DETAILS_RESULT, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function SAVE_A_ST_SURVEY_DETAILS_RESULT(e:CheckEvent):void
+			{
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_A_ST_SURVEY_DETAILS_RESULT );
+				
+				if (e.data > 0) 
+				{
+					Dialog.service.toast("Фото сохранено");
+				}	
+				else	
+				{
+					Globals.showOkDialog("Ошибка сохранения фото",e.text);
+				}
+			}
+			
+
+			private function closeHandler(e:PopUpEvent):void
+			{
+				if (e.commit)
+				{
+					imgCount--;
+					imgTaken.visible = false;
+					imgTaken.includeInLayout = false;
+					imgTaken.source = null;
+				}
+			}
+			
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				switch (Globals.SURVEY_LANG)
+				{
+					case "RUS" : setRussian();
+						break;
+					case "KAZ" : setKazakh();
+						break;
+					default    : setRussian();
+				}
+			}
+			
+			private function setRussian():void
+			{
+				this.btnTakePicture.label = "Снять Фото";				
+			}
+			
+			private function setKazakh():void
+			{
+				this.btnTakePicture.label = "Фото түсіру";
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:BitmapImage id="img" scaleMode="stretch" smooth="true" smoothingQuality="high" width="100%" height="100%" />
+	<s:VGroup width="100%" height="90%" gap="0">
+		<Promo:NavBar id="navBar" headerObject="{arrQuestions.getItemAt(0) as Object}" />	
+		<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingTop="20" paddingBottom="50">		
+			<s:Label id="mediaPath" text="..." width="100%" visible="false" includeInLayout="false" />
+			<s:Label id="lblOrientation" text="..." width="100%" visible="false" includeInLayout="false" />
+			<s:BitmapImage id="imgTaken" scaleMode="letterbox" width="400" />
+			<s:Label id="lblImgData" text="Всего фото: {imgCount.toString()}" visible="false" includeInLayout="false" />
+			<s:HGroup height="150" width="50%" gap="0"
+					  visible="{!PICTURE_TAKEN}" includeInLayout="{!PICTURE_TAKEN}">
+				<s:Group width="100%" height="150">
+					<s:Rect width="100%" height="100%" alpha="0.7" radiusX="5" radiusY="5">
+						<s:fill>
+							<s:SolidColor color="0xFFFFFF"/>
+						</s:fill>
+					</s:Rect>
+					<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingLeft="10" paddingRight="10">
+						<s:Label id="lblNumWarning"
+								 fontSize="27"
+								 width="100%" textAlign="center"/>
+					</s:VGroup>
+				</s:Group>
+			</s:HGroup>	
+
+			<s:VGroup width="100%" height="100%" verticalAlign="bottom" />
+			<s:Button id="btnTakePicture" width="50%" height="120" 
+					  chromeColor="{Globals.BUTTON_CHROME_COLOR}"
+					  color="{Globals.BUTTON_COLOR}"
+					  label="Снять Фото" click="btnTakePicture_clickHandler(event)" />
+		</s:VGroup>
+	</s:VGroup>	
+	
+</s:Group>

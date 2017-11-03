@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+					xmlns:s="library://ns.adobe.com/flex/spark"
+					decorator="@Embed('assets/images/system/next.png')"
+					preinitialize="iconitemrenderer1_preinitializeHandler(event)"
+					creationComplete="iconitemrenderer1_creationCompleteHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			protected var visited:Boolean = false;
+			
+			protected function iconitemrenderer1_creationCompleteHandler(event:FlexEvent):void
+			{
+				
+			}
+			protected function iconitemrenderer1_preinitializeHandler(event:FlexEvent):void
+			{
+				this.minHeight = Math.ceil(Capabilities.screenResolutionY*0.05);
+				this.labelFunction = lblFunction;
+				this.messageFunction = msgFunction;
+			}
+			
+			private function lblFunction(item:Object):String
+			{
+				var s:String = item.SAL_NAME;
+				try
+				{
+					s += "      " + (item.SAL_OWNER != null ? "[" + item.SAL_OWNER + "]" : "");
+				} catch (e:Error) {}
+				
+				return s;
+			}
+			
+			private function msgFunction(item:Object):String
+			{
+				var s:String = (item.SAL_HOUSE != null ? item.SAL_HOUSE : "");
+					
+					// 3rd line
+					s += "\n";
+					if ((item.SAL_NOTES != null) && (item.SAL_NOTES != "null"))
+					{
+						s += item.SAL_NOTES;
+					}
+
+					
+
+				return s;
+			}
+
+			private function zeroPad(input:String, width:int):String {
+				var ret:String = "" + input;
+				while( ret.length < width )
+					ret= ret + " ";
+				return ret;
+			}
+			
+			override protected function drawBackground(unscaledWidth:Number, unscaledHeight:Number):void
+			{
+				if (this.data.VISITED == 1)
+				{
+					super.alpha = 0.7;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					opaqueBackground = "0xBED600";
+				}
+				else
+				{
+					super.alpha = 1;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					opaqueBackground = null;
+				}
+			}
+			
+			
+			
+		]]>
+	</fx:Script>
+</s:IconItemRenderer>

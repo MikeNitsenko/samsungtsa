@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)" 
+		 xmlns:Promo="components.promo.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Utils.TextFile;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			[Bindable] private var sum:int = 0;
+			private var totalItemQnt:Number = 0;
+			[Bindable] private var arrProducts:ArrayCollection = new ArrayCollection();
+			[Bindable] private var arrSale:ArrayCollection = new ArrayCollection();
+			private var QUE_CODE:String = "";
+			
+			protected var arrCurrentQuestion:ArrayCollection = new ArrayCollection();
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				//navBar.imgBack.enabled = false;
+				
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + imgName).url;
+				
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+
+				QUE_CODE = arrQuestions.getItemAt(0).SUD_QUE_CODE;
+				
+				Database.addEventListener(QueryEvent.DATA_LOADED, dataLoaded, false, 0, true);
+				Database.init("SELECT * FROM VIEW_ST_PROD_BASKET_DETAILS");
+			}
+			private function dataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, dataLoaded );				
+				arrProducts = e.data;
+
+				Database.addEventListener(QueryEvent.DATA_LOADED, saleDataLoaded, false, 0, true);
+				Database.init("SELECT * FROM VIEW_PRESENT_DISTRIBUTION WHERE DOC_VIS_NUMBER = '" + Globals.SUB_VIS_NUMBER + "'" );
+			}
+			private function saleDataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, saleDataLoaded );				
+				arrSale = e.data;
+				
+				countSumOfAnswers();
+			}
+
+			// Count sum of weights of answers
+			private function countSumOfAnswers():void
+			{
+				//navBar.imgNext.enabled = false;
+
+				arrQuestions.filterFunction = null;
+				arrQuestions.refresh();
+				
+				sum = 0;
+				totalItemQnt = 0;
+				
+				for (var i:int=0; i<arrQuestions.length; i++)
+				{
+					if (arrQuestions.getItemAt(i).SRS_ANS_VALUE == "1")
+					{
+						try
+						{
+							sum += Number(arrQuestions.getItemAt(i).ANS_WEIGHT);
+						} catch (err:Error) {}
+					}
+				}	
+				
+				arrQuestions.filterFunction = filterByQuestion;
+				arrQuestions.refresh();
+
+				
+/*
+				// parse sum by digits and find quantities - e.g. sum = 21 and it's 2*10 + 1
+				var a:Array = sum.toString().split("").reverse(); // pushed digits reversed into array, so now "123" is in ["3","2","1"] - 3*10^2 + 2*10^1 + 1*10^0
+				for (var k:int=0; k<arrQuestions.length; k++)
+				{
+					var ansWeight:Number = 0;					
+					try
+					{
+						ansWeight = arrQuestions.getItemAt(k).ANS_WEIGHT;
+					} catch (err:Error) {}
+					
+					function findItemQnt():Number
+					{
+						var result:Number = 0;
+						for (var l:int=0; l<a.length; l++)
+						{
+							if (Math.pow(10,l) == ansWeight)
+							{
+								result = Number(a[l]);
+								break;
+							}
+						}
+						return result;
+					}
+
+					var itemBar:uPresentItemBar = new uPresentItemBar();
+					itemBar.order = k;
+					itemBar.itemQnt = findItemQnt();
+					itemBar.TEXT = arrQuestions.getItemAt(k)[Globals.ANS_TEXT_LANG];
+					vgValues.addElement(itemBar);
+				}
+*/
+				
+				if (sum == 0)
+				{
+					moveToNextQuestion();
+				}
+				else
+				{
+					for (var k:int=0; k<arrQuestions.length; k++)
+					{
+						var ansWeight:Number = 0;					
+						try
+						{
+							ansWeight = arrQuestions.getItemAt(k).ANS_WEIGHT;
+						} catch (err:Error) {}
+						
+						if (sum == ansWeight)
+						{
+							createProductsList(arrQuestions.getItemAt(k));
+							break;
+						}
+					}
+				}
+			}
+			
+			
+			protected function filterByQuestion(item:Object):Boolean
+			{
+				var result:Boolean = false;
+				
+				if (item.SUD_QUE_CODE == QUE_CODE)
+				{
+					result = true;
+				}	
+				
+				return result;
+			}
+			
+			protected function createProductsList(o:Object):void
+			{
+				arrProducts.filterFunction = filterByBasket;
+				arrProducts.refresh();
+				
+				function filterByBasket(item:Object):Boolean
+				{
+					var res:Boolean = false;						
+					if (item.PBA_CODE == o.ANS_PBA_CODE) { res = true; }							
+					return res;
+				}
+				
+				for (var m:int=0; m<arrProducts.length; m++)
+				{
+					// if product has been already distributed - minus it from basket
+					
+					var itemQnt:Number = Number(arrProducts.getItemAt(m).PBD_QUANTITY);
+					
+					for (var n:int=0; n<arrSale.length; n++)
+					{
+						if (arrSale.getItemAt(n).DOD_PRO_CODE == arrProducts.getItemAt(m).PRO_CODE)
+						{
+							itemQnt = itemQnt - Number(arrSale.getItemAt(n).TOTAL_PROD_QNT);							
+							break;
+						}
+					}
+					
+					if (itemQnt < 0) { itemQnt = 0; } 
+					
+					totalItemQnt += itemQnt;
+					
+					var itemBar:uPresentItemBar = new uPresentItemBar();
+					itemBar.order = m;
+					itemBar.itemQnt = itemQnt;
+					itemBar.TEXT = arrProducts.getItemAt(m).PRO_NAME;
+					vgValues.addElement(itemBar);
+				}
+				
+				if ((sum == 0) || (totalItemQnt == 0))
+				{
+					/*
+					var itemBarZeroSum:uPresentItemBar = new uPresentItemBar();
+					itemBarZeroSum.order = 0;
+					itemBarZeroSum.itemQnt = 0;
+					itemBarZeroSum.TEXT = "Нет сувениров для выдачи";
+					vgValues.addElement(itemBarZeroSum);
+					*/
+					moveToNextQuestion();
+				}
+				
+				//navBar.imgNext.enabled = true;
+			}
+			
+			private function moveToNextQuestion():void
+			{
+				Dialog.service.toast("Нет продукции для выдачи. Продолжите опрос");
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+			}
+			
+			
+			
+			
+			protected function backHandler(event:NavBarEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{
+				if (sum != 0)
+				{
+					SAVE_DISTRIBUTION();
+				}
+				else
+				{
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}
+			}
+			
+			private function SAVE_DISTRIBUTION():void
+			{
+				var adjArr:ArrayCollection = new ArrayCollection();					
+				var bq:BatchQuery = new BatchQuery();
+				Globals.DOC_NUMBER = Globals.getUniqueCode();
+				
+				var count:Number = 0;
+				
+				if (vgValues.numElements > 0)
+				{
+					for (var i:int=0;i<vgValues.numElements;i++)
+					{
+						count += (vgValues.getElementAt(i) as uPresentItemBar).itemQnt;	
+					}
+					
+					/*
+					var bqUpdate:BatchQuery = new BatchQuery();
+					bqUpdate.query = "UPDATE ST_RESPONDENTS SET " +					
+						"RES_SURVEY_SUM = '" + sum.toString() + "' " + 
+						"WHERE " + 
+						"RES_SUR_CODE = " + Globals.SUR_CODE + " AND " + 
+						"RES_VIS_NUMBER = '" + VIS_NUMBER + "'";
+					adjArr.addItem(bqUpdate);
+					*/
+					
+					bq.query = "INSERT INTO ST_DOC_HEADERS (DOC_VIS_NUMBER, DOC_CODE, DOC_DOT_ID, DOC_QNT_TOTAL) VALUES (" +
+						"'" + Globals.SUB_VIS_NUMBER + "'" + "," +
+						"'" + Globals.DOC_NUMBER + "'" + "," +
+						"'" + "SALE" + "'" + "," +
+						count.toString() + 
+						")";
+					adjArr.addItem(bq);
+					
+					Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_SALE_HEADER_RESULT );
+					Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_SALE_HEADER_RESULT, false, 0, true);
+					Database.ADJUST(adjArr);
+				}
+				else
+				{
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}
+			}
+			
+			private function SAVE_SALE_HEADER_RESULT(e:CheckEvent):void
+			{
+				if (e.data > 0) 
+				{
+					SAVE_SALE_DETAILS();
+				}	
+				else	
+				{
+					Globals.showOkDialog("Ошибка записи в БД", "Ошибка сохранения заголовка | " + e.text);
+					
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}
+			}
+			
+			private function SAVE_SALE_DETAILS():void
+			{
+				var adjArr:ArrayCollection = new ArrayCollection();					
+				
+				for (var i:int=0; i<arrProducts.length; i++)
+				{				
+					var bq:BatchQuery = new BatchQuery();
+					bq.query = "INSERT INTO ST_DOC_DETAILS (DOD_DOC_CODE, DOD_ID, DOD_PRO_CODE, DOD_PRO_COUNT) VALUES (" +
+						"'" + Globals.DOC_NUMBER + "'" + "," +
+						"'" + Globals.getUniqueCode() + " - " + i.toString() + "'" + "," +
+						arrProducts.getItemAt(i).PRO_CODE + "," + 
+						(vgValues.getElementAt(i) as uPresentItemBar).itemQnt.toString() + ")";
+					adjArr.addItem(bq);
+
+					// Write log
+					TextFile.append("SALE;" + Globals.USE_CODE + ";" + Globals.PER_CODE + ";" + 
+						Globals.DOC_NUMBER + ";" + "PRO_CODE: " + arrProducts.getItemAt(i).PRO_CODE + " | PRO_COUNT: " + arrProducts.getItemAt(i).PRO_COUNT + " | SAL_ID: " 
+						+ Globals.SAL_ID + ";" + Globals.CurrentDateTimeWithMinutesSecondsString() + ";" + Globals.VERSION_NUMBER + ";" + File.lineEnding);
+				}
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_SALE_DETAILS_RESULT );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_SALE_DETAILS_RESULT, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			
+			private function SAVE_SALE_DETAILS_RESULT(e:CheckEvent):void
+			{
+				if (e.data > 0) 
+				{
+					Dialog.service.toast("Выдача сохранена");
+				}	
+				else	
+				{
+					Globals.showOkDialog("Ошибка записи в БД", "Ошибка сохранения деталей документа | " + e.text);
+				}
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+			}
+			
+			
+			protected function hgroup1_gestureSwipeHandler(event:TransformGestureEvent):void
+			{
+				Dialog.service.toast("Сумма баллов: " + sum.toString() + " | Количество продукции: " + totalItemQnt.toString());
+			}
+			
+		]]>
+	</fx:Script>
+	<s:BitmapImage id="img" scaleMode="stretch" smooth="true" smoothingQuality="high" width="100%" height="100%" />
+	<s:VGroup width="100%" height="90%" gap="0">
+		<Promo:NavBar id="navBar" headerObject="{arrQuestions.getItemAt(0) as Object}" />		
+		<s:HGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" gestureSwipe="hgroup1_gestureSwipeHandler(event)">				
+			<s:VGroup id="panQuestions" width="80%" height="100%" verticalAlign="middle" horizontalAlign="center">
+				
+					<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center">
+						<s:Label id="lblSum" text="{sum.toString()}" fontSize="40" color="0x000000" visible="false" />
+						<s:VGroup id="vgValues" width="90%" height="95%">
+						</s:VGroup>
+					</s:VGroup>
+				
+			</s:VGroup>
+		</s:HGroup>
+	</s:VGroup>	
+</s:Group>

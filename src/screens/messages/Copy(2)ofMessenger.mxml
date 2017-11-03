@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.application.Application;
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.nativewebview.NativeWebView;
+			import com.distriqt.extension.nativewebview.WebView;
+			import com.distriqt.extension.nativewebview.events.BrowserViewEvent;
+			import com.distriqt.extension.nativewebview.events.NativeWebViewEvent;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import events.MainNavEvent;
+			
+			
+			
+			[Bindable] private var acMessages:ArrayCollection = new ArrayCollection();
+			private var webView:WebView;
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				webView = NativeWebView.service.createWebView( new Rectangle( 0, 100, Application.service.device.displayMetrics.screenWidth, Application.service.device.displayMetrics.screenHeight - 100 ) ) ;
+				
+				webView.addEventListener( NativeWebViewEvent.COMPLETE, webView_completeHandler );
+				webView.addEventListener( NativeWebViewEvent.JAVASCRIPT_RESPONSE, javascriptResponseHandler );
+				webView.addEventListener( NativeWebViewEvent.JAVASCRIPT_MESSAGE, javascriptMessageHandler );
+				
+				var file:File = File.documentsDirectory.resolvePath( "TSA_PROMO/index.html" );
+				
+				webView.loadURL( "file://"+file.nativePath );
+				/*
+				if (NativeWebView.service.browserView.isSupported)
+				{
+					NativeWebView.service.browserView.addEventListener( BrowserViewEvent.CLOSED, browserView_closedEventHandler );
+					NativeWebView.service.browserView.addEventListener( BrowserViewEvent.OPENED, browserView_eventHandler );
+					NativeWebView.service.browserView.addEventListener( BrowserViewEvent.LOADED, browserView_eventHandler );
+					NativeWebView.service.browserView.addEventListener( BrowserViewEvent.ERROR, browserView_eventHandler );
+					
+					NativeWebView.service.browserView.openWithUrl( "http://www.samsung.com/kz_ru/" );
+				} 
+				else 
+				{
+					Dialog.service.toast("Browser View is not supported");
+					dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false));	
+				}
+				*/
+				
+			}
+			
+			private function webView_completeHandler( event:NativeWebViewEvent ):void
+			{
+				webView.evaluateJavascript( "greet('JENYA');" );
+			}
+			
+			private function javascriptResponseHandler( event:NativeWebViewEvent ):void
+			{
+				Dialog.service.toast( "evaluateJavascript response: " + event.data );
+				trace( "evaluateJavascript response: " + event.data );
+			}
+			
+			private function javascriptMessageHandler( event:NativeWebViewEvent ):void
+			{
+				// This is the message sent from the javascript 
+				// AirBridge.message i.e. 'content-for-air' 
+				trace( "message from JS: " + event.data );
+				Dialog.service.toast( "message from JS: " + event.data );
+			}
+			
+			
+			private function browserView_eventHandler( event:BrowserViewEvent ):void
+			{
+				trace( "browserView_eventHandler( " +event.type + " )");
+			}
+			
+			private function browserView_closedEventHandler( event:BrowserViewEvent ):void
+			{
+				trace( "browserView_eventHandler( " +event.type + " )");
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false));
+			}
+			
+			
+			protected function btnBack_clickHandler(event:MouseEvent):void
+			{
+				webView.dispose();
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false));
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:Button id="btnBack" width="100%" height="80" label="НАЗАД" click="btnBack_clickHandler(event)" />
+</s:VGroup> 

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					xmlns:s="library://ns.adobe.com/flex/spark"  
+					labelField="ANS_TEXT">
+	<fx:Script>
+		<![CDATA[
+			
+
+			[Embed(source="assets/images/system/checked.png")]  
+			public var checked:Class;
+			
+			[Embed(source="assets/images/system/empty.png")] 
+			public var unchecked:Class;
+			
+			override protected function drawBackground(unscaledWidth:Number, unscaledHeight:Number):void
+			{
+				if (this.data.SELECTED == "1")
+				{
+					super.alpha = 0.7;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					graphics.clear();
+					graphics.beginFill(0xBED600,0.5);
+					graphics.drawRect(0, 0, unscaledWidth, unscaledHeight);
+					graphics.endFill();
+				}
+				else
+				{
+					super.alpha = 1;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+				}	
+				
+			}
+			
+
+			override public function set data(value:Object):void
+			{
+				super.data = value;
+				if(value != null)
+				{
+					if(value.SELECTED == "1")
+					{
+						decorator = checked;
+					}
+					else
+					{
+						decorator = unchecked;						
+					}
+				}
+			}
+			
+			
+		]]>
+	</fx:Script>
+</s:IconItemRenderer>

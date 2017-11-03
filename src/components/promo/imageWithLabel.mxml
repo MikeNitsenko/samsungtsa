@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 preinitialize="group1_preinitializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			import events.ImageCheckedEvent;
+			
+			[Bindable] public var imageHeight:Number = 0;
+			[Bindable] public var imageText:String = "(нет текста)";
+			[Bindable] public var imageId:String = Globals.getUniqueCode();
+			[Bindable] public var checked:Boolean = false;
+			[Bindable] public var showTextOverImages:Boolean = true;
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				this.id = imageId;
+			}
+			
+			protected function image1_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new ImageCheckedEvent(ImageCheckedEvent.CHECK_EVENT,true,false,Number(imageId),imageText));
+			}
+			
+		]]>
+	</fx:Script>
+	
+	
+	<s:VGroup verticalAlign="middle" horizontalAlign="center" width="100%" height="100%">
+		<s:Group width="{imageHeight}" height="{imageHeight}" maxHeight="{imageHeight}">
+			<s:Rect width="100%" height="100%" radiusX="5" radiusY="5" alpha="0.2">
+				<s:fill>
+					<s:SolidColor color="0xFFFFFF"/>
+				</s:fill>
+				<s:stroke>
+					<s:SolidColorStroke	color="#FFFFFF"
+										weight="2"
+										alpha="1" />
+				</s:stroke>
+			</s:Rect>
+		</s:Group> 	
+	</s:VGroup>
+	
+	<s:VGroup verticalAlign="middle" horizontalAlign="center" width="100%" height="100%">
+		<s:Image id="img" scaleMode="letterbox" 
+				 smoothingQuality="high"
+				 maxWidth="{Math.ceil(imageHeight*0.9)}"
+				 height="{imageHeight}" buttonMode="true" />
+	</s:VGroup>
+	<s:VGroup verticalAlign="top" horizontalAlign="center" width="100%" height="100%" visible="{showTextOverImages}" includeInLayout="{showTextOverImages}">
+		<s:Group width="100%" height="10%" maxHeight="{imageHeight}">
+			<s:Rect width="100%" height="100%" radiusX="5" radiusY="5" alpha="0.9">
+				<s:fill>
+					<s:SolidColor color="0xFFFFFF"/>
+				</s:fill>
+			</s:Rect>
+			<s:HGroup width="100%" height="100%" horizontalAlign="center" verticalAlign="middle">
+				<s:Label text="{imageText}" width="100%" height="100%" verticalAlign="middle"
+						 textAlign="center" paddingLeft="5" paddingRight="5"/>
+			</s:HGroup>
+		</s:Group> 		
+	</s:VGroup>
+	<s:VGroup width="100%" height="100%" verticalAlign="bottom" horizontalAlign="center" paddingBottom="5" click="image1_clickHandler(event)">
+		<s:Image id="imgChecked" source="@Embed('assets/images/system/accept.png')" visible="{checked}" />
+	</s:VGroup>
+</s:Group>

@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  xmlns:system="components.system.*"
+		  width="100%" height="100%" creationComplete="vgroup1_creationCompleteHandler(event)"
+		  gap="0" preinitialize="vgroup1_preinitializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.effects.Fade;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Utils.TextFile;
+			
+			import components.promo.aFirstScreen;
+			import components.promo.cSingleChoice;
+			import components.promo.dVideoPlayerNew;
+			import components.promo.eSingleChoiceWithImages;
+			import components.promo.fRatings;
+			import components.promo.gSignature;
+			import components.promo.kFinalScreen;
+			import components.promo.mPhotoCapture;
+			import components.promo.nPlainPhoto;
+			import components.promo.oNameSurnamePhone;
+			import components.promo.pBirthGender;
+			import components.promo.pBirthGenderMaleOnly;
+			import components.promo.rEnterCode;
+			import components.promo.rEnterCodeStrictMode;
+			import components.promo.sLanguageSelectionRusKaz;
+			import components.promo.tSingleChoiceProbe;
+			import components.promo.uPresentsDistribution;
+			import components.promo.vSingleChoiceImagesGrid;
+			import components.promo.wSingleChoiceFilter;
+			
+			import events.MainNavEvent;
+			import events.PromoSurveyEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+
+			[Bindable] private var arrQuestions:ArrayCollection = new ArrayCollection();
+			[Bindable] private var questionCounter:int = 0;			
+			[Bindable] private var questionType:String = "";
+			
+			private var SUB_VIS_NUMBER:String = "";
+			private var questionBreadcrumb:Array;
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.LANDSCAPE);
+			}			
+			
+			private function exitScreen():void
+			{
+				NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.NORMAL;
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false,""));
+			}
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// screen always on
+				NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.KEEP_AWAKE;
+				
+				Globals.SURVEY_CODE = Globals.randomFromRange(100,999).toString();
+				
+				SUB_VIS_NUMBER = Globals.SUB_VIS_NUMBER;
+				questionBreadcrumb = new Array();
+				
+				Globals.VIDEO_PLAY_COMPLETED = false;
+				
+				this.addEventListener(PromoSurveyEvent.FINISH_EVENT,finishHandler,false,0,true);
+				this.addEventListener(PromoSurveyEvent.DELETE_EVENT,deleteHandler,false,0,true);
+				this.addEventListener(PromoSurveyEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(PromoSurveyEvent.NEXT_EVENT,nextHandler,false,0,true);
+				
+				this.addEventListener("FINISH_PROMO",finishPromo,false,0,true);
+				
+				Database.removeEventListener(QueryEvent.DATA_LOADED, firstQuestionLoaded);
+				Database.addEventListener(QueryEvent.DATA_LOADED, firstQuestionLoaded, false, 0, true);
+				Database.init("SELECT * FROM VIEW_SURVEY_RESULTS  " +
+					"WHERE SUD_SUR_CODE = " + Globals.SUR_CODE + " AND (SAL_CODE = " + Globals.SAL_CODE + ") " +
+					"AND SRS_VIS_NUMBER = '" + SUB_VIS_NUMBER + "'");
+			}
+			private function firstQuestionLoaded(e:QueryEvent):void
+			{		
+				Database.removeEventListener(QueryEvent.DATA_LOADED, firstQuestionLoaded);
+				
+				if (e.data.length > 0)
+				{
+					arrQuestions = e.data;
+					questionLoaded(arrQuestions.getItemAt(0).SUD_QUE_CODE);
+				}
+				else
+				{
+					Globals.showOkDialog("Ошибка", "Нет ответов для отображения");
+					exitScreen();
+				}
+			}
+			private function questionLoaded(QUE_CODE:String):void
+			{
+				arrQuestions.filterFunction = null;
+				arrQuestions.refresh();
+				
+				arrQuestions.filterFunction = filterByQuestion;
+				arrQuestions.refresh();
+				
+				function filterByQuestion(item:Object):Boolean
+				{
+					var result:Boolean = false;
+					
+					if (item.SUD_QUE_CODE == QUE_CODE)
+					{
+						result = true;
+					}	
+					
+					return result;
+				}				
+				
+				questionType = arrQuestions.getItemAt(0).QUE_QUT_CODE;
+				
+				questionBreadcrumb.push(arrQuestions.getItemAt(0).SUD_QUE_CODE);
+				questionCounter = questionBreadcrumb.length;
+				
+				loadQuestionModule();
+				
+				questionCounter++;	
+			}
+			
+			// NEXT QUESTION
+			private function nextQuestion():void
+			{
+				var NEXT_SUD_QUE_CODE:String = findAnsweredQuestion();
+				if (NEXT_SUD_QUE_CODE.length == 0)
+				{
+					try
+					{
+						NEXT_SUD_QUE_CODE = arrQuestions.getItemAt(0).SUD_ANS_NEXT_QUE_CODE;
+					}
+					catch (err:Error)
+					{
+						Globals.showOkDialog("ERROR 121 NEXT QUESTION",err.getStackTrace());
+					}
+				}				
+				
+				questionLoaded(NEXT_SUD_QUE_CODE);
+			}			
+			private function findAnsweredQuestion():String
+			{
+				var result:String = "";
+				
+				for (var i:int=0; i<arrQuestions.length; i++)
+				{
+					if (arrQuestions.getItemAt(i).SELECTED == "1")
+					{
+						result = arrQuestions.getItemAt(i).SUD_ANS_NEXT_QUE_CODE;
+						break;
+					}
+				}				
+				return result;
+			}
+			
+			private function finishPromo(e:Event):void
+			{
+				NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.NORMAL;
+				exitScreen();
+			}
+			
+			protected function finishHandler(event:PromoSurveyEvent):void
+			{
+				NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.NORMAL;
+				exitScreen();
+			}
+			
+			// PREVIOUS QUESTION
+			private function pushBack():void
+			{
+				if (questionBreadcrumb.length == 1)
+				{
+					exitScreen();
+				}
+				
+				if (questionBreadcrumb.length > 1) 
+				{	
+					questionBreadcrumb.pop();	
+					questionCounter--;	
+				}	
+				questionLoaded(questionBreadcrumb.pop());
+			}
+			
+			protected function deleteHandler(event:PromoSurveyEvent):void
+			{
+				DELETE_PROMO_SURVEY();		
+			}
+			
+			protected function backHandler(event:PromoSurveyEvent):void
+			{
+				pushBack();				
+			}
+			
+			protected function nextHandler(event:PromoSurveyEvent):void
+			{
+				nextQuestion();					
+			}
+			
+			
+			private function DELETE_PROMO_SURVEY():void
+			{
+				Globals.loadingShow(Globals.SUR_NAME, "Удаление данных опроса...");
+				
+				var adjArr:ArrayCollection = new ArrayCollection();
+				
+				var bq:BatchQuery = new BatchQuery();
+				bq.query = "DELETE FROM ST_VISIT WHERE VIS_NUMBER = '" + Globals.SUB_VIS_NUMBER + "'";
+				
+				var bq2:BatchQuery = new BatchQuery();
+				bq2.query = "DELETE FROM ST_RESPONDENTS WHERE RES_VIS_NUMBER = '" + Globals.SUB_VIS_NUMBER + "'";
+				
+				var bq3:BatchQuery = new BatchQuery();
+				bq3.query = "DELETE FROM ST_SURVEY_RESULTS WHERE SRS_VIS_NUMBER = '" + Globals.SUB_VIS_NUMBER + "'";
+				
+				adjArr.addItem(bq);
+				adjArr.addItem(bq2);
+				adjArr.addItem(bq3);
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, REMOVE_SUB_VISIT_RESULT );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, REMOVE_SUB_VISIT_RESULT, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function REMOVE_SUB_VISIT_RESULT(e:CheckEvent):void
+			{
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, REMOVE_SUB_VISIT_RESULT );
+				Globals.loadingClose();
+				
+				if (e.data > 0) 
+				{		
+					// Write log
+					TextFile.append("SURVEY_DELETED;" + Globals.USE_CODE + ";" + Globals.VIS_PROMO_NAME + ";" + 
+						Globals.SUR_NAME + ";" + "SAL_ID: " + Globals.SAL_ID + ";" + Globals.CurrentDateTimeWithMinutesSecondsString() + ";" + Globals.VERSION_NUMBER + ";" + File.lineEnding);
+				}	
+				else	
+				{
+					Globals.showOkDialog("Ошибка удаления", e.text);
+				}
+				
+				exitScreen();
+			}	
+			
+			private function loadQuestionModule():void
+			{
+				try
+				{
+					this.removeAllElements();
+					
+					var fade:Fade = new Fade();
+					fade.target = this;
+					fade.duration = 1000;
+					fade.alphaFrom = 0;
+					fade.alphaTo = 1;
+					
+					fade.stop();
+					fade.play();
+					
+					switch (questionType)
+					{
+						case "9" : loadFirstScreen();
+							break;
+						case "7" : loadSingleChoiceWithImages();
+							break;
+						case "15" : loadSingleChoice();
+							break;
+						case "11" : loadRatings();
+							break;
+						case "12" : loadSignature();
+							break;
+						case "14" : loadFinalScreen();
+							break;
+						case "20" : loadPhotoCapture();
+							break;
+						case "21" : loadNPlainPhoto();
+							break;
+						case "22" : loadONameSurnamePhone();
+							break;
+						case "23" : loadPBirthGender();
+							break;
+						case "24" : loadREnterCode();
+							break;
+						case "40" : loadREnterCodeStrictMode();
+							break;
+						case "25" : loadPBirthGenderMaleOnly();
+							break;
+						case "26" : loadSLanguageSelection();
+							break;
+						case "27" : loadTSingleChoiceProbe();
+							break;
+						case "28" : loadUPresentsDistribution();
+							break;
+						case "29" : loadVideoPlayerNew();
+							break;
+						case "30" : loadVSingleChoiceImagesGrid(true);
+							break;
+						case "31" : loadWSingleChoiceFilter();
+							break;
+						case "32" : loadVSingleChoiceImagesGrid(false);
+							break;
+						default : exitScreen();
+					}
+					this.setFocus();
+				}
+				catch (err:Error)
+				{
+					Globals.showOkDialog("ERROR 1-2-1",err.getStackTrace());
+				}
+			}
+			
+			private function loadFirstScreen():void
+			{
+				var screen:aFirstScreen = new aFirstScreen();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+
+			private function loadSingleChoice():void
+			{
+				var c:cSingleChoice = new cSingleChoice();
+				c.VIS_NUMBER = SUB_VIS_NUMBER;
+				c.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				c.arrQuestions = arrQuestions;
+				this.addElement(c);
+			}
+			
+		
+			private function loadSingleChoiceWithImages():void
+			{
+				var e:eSingleChoiceWithImages = new eSingleChoiceWithImages();
+				e.VIS_NUMBER = SUB_VIS_NUMBER;
+				e.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				e.arrQuestions = arrQuestions;
+				this.addElement(e);
+			}
+			
+			private function loadRatings():void
+			{
+				var f:fRatings = new fRatings();
+				f.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				f.arrQuestions = arrQuestions;
+				this.addElement(f);
+			}
+			
+			private function loadSignature():void
+			{
+				var g:gSignature = new gSignature();
+				g.VIS_NUMBER = SUB_VIS_NUMBER;
+				g.arrQuestions = arrQuestions;
+				this.addElement(g);
+			}
+
+			
+			private function loadPhotoCapture():void
+			{
+				var h:mPhotoCapture = new mPhotoCapture();
+				h.arrQuestions = arrQuestions;
+				h.TEXT = arrQuestions.getItemAt(0)[Globals.QUE_TEXT_LANG];
+				h.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				this.addElement(h);
+			}
+			
+			private function loadFinalScreen():void
+			{
+				var k:kFinalScreen = new kFinalScreen();
+				k.VIS_NUMBER = SUB_VIS_NUMBER;
+				k.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				k.TEXT = arrQuestions.getItemAt(0)[Globals.ANS_TEXT_LANG];
+				k.arrQuestions = arrQuestions;
+				this.addElement(k);
+			}
+			
+			private function loadNPlainPhoto():void
+			{
+				var screen:nPlainPhoto = new nPlainPhoto();
+				if (questionCounter == 0)
+				{
+					screen.BACK_VISIBLE = false;
+				}
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadONameSurnamePhone():void
+			{
+				var screen:oNameSurnamePhone = new oNameSurnamePhone();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadPBirthGender():void
+			{
+				var screen:pBirthGender = new pBirthGender();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadPBirthGenderMaleOnly():void
+			{
+				var screen:pBirthGenderMaleOnly = new pBirthGenderMaleOnly();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadREnterCode():void
+			{
+				var screen:rEnterCode = new rEnterCode();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadREnterCodeStrictMode():void
+			{
+				var screen:rEnterCodeStrictMode = new rEnterCodeStrictMode();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadSLanguageSelection():void
+			{
+				var screen:sLanguageSelectionRusKaz = new sLanguageSelectionRusKaz();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadTSingleChoiceProbe():void
+			{
+				var screen:tSingleChoiceProbe = new tSingleChoiceProbe();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadUPresentsDistribution():void
+			{
+				var screen:uPresentsDistribution = new uPresentsDistribution();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadVSingleChoiceImagesGrid(showTextOverImages:Boolean):void
+			{
+				var screen:vSingleChoiceImagesGrid = new vSingleChoiceImagesGrid();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.showTextOverImage = showTextOverImages;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadWSingleChoiceFilter():void
+			{
+				var screen:wSingleChoiceFilter = new wSingleChoiceFilter();
+				screen.VIS_NUMBER = SUB_VIS_NUMBER;
+				screen.imgName = arrQuestions.getItemAt(0).QUE_PHOTO;
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+			private function loadVideoPlayerNew():void
+			{
+				var screen:dVideoPlayerNew = new dVideoPlayerNew();
+				screen.arrQuestions = arrQuestions;
+				this.addElement(screen);
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" backVisible="true" titleText="Задачи"/>
+	
+	<s:VGroup width="100%" height="100%" padding="5">
+		<s:Panel width="100%" height="100%" title="Начало работы">
+			
+		</s:Panel>	
+	</s:VGroup>
+</s:VGroup>

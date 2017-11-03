@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					xmlns:s="library://ns.adobe.com/flex/spark"
+					preinitialize="itemrenderer2_preinitializeHandler(event)"
+					autoDrawBackground="false">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.application.Application;
+			
+			import mx.events.FlexEvent;
+			
+			protected function itemrenderer2_preinitializeHandler(event:FlexEvent):void
+			{
+				this.minHeight = Math.ceil(Application.service.device.displayMetrics.screenHeight*0.05);
+			}
+			
+			override public function set data(value:Object):void
+			{
+				super.data = value;
+				if(value != null)
+				{
+					lblAnsText.text = value.ANS_TEXT;
+					lblAnsValue.text = value.SRS_ANS_VALUE;
+					bg.visible = value.SELECTED == "1" ? true : false;
+				}
+			}
+
+		]]>
+	</fx:Script>
+	
+	<s:Group width="100%" height="100%">
+		<s:Rect id="bg" top="0" bottom="0" left="0" right="0">
+			<s:fill>
+				<s:SolidColor color="#FF0000" alpha="0.3" />
+			</s:fill>
+		</s:Rect>
+	</s:Group>
+	<s:HGroup width="100%" 
+			  padding="5" 
+			  verticalAlign="middle" 
+			  height="100%">
+		<s:Label id="lblAnsText"
+				 fontWeight="bold"
+				 width="70%" />
+		<s:Label id="lblAnsValue" 
+				 width="30%" 
+				 verticalAlign="middle" textAlign="center" />
+	</s:HGroup>
+	
+</s:ItemRenderer>

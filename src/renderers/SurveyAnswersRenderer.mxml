@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+					xmlns:s="library://ns.adobe.com/flex/spark" 
+					labelField="ANS_TEXT"
+					messageField="SRS_ANS_VALUE"
+					labelFunction="getLabel"
+					messageFunction="getMessage">
+	<fx:Script>
+		<![CDATA[
+			import spark.components.Image;
+			
+			private var img:Image = new Image();
+			private var oldUnscaledWidth:Number;
+			
+			[Bindable]
+			public var myBGColor:int = 0xFFFFFF;
+			
+			[Embed(source="assets/images/system/checked.png")]  
+			public var checked:Class;
+			
+			[Embed(source="assets/images/system/empty.png")] 
+			public var unchecked:Class;				
+			
+			
+			private function getLabel(item:Object):String
+			{
+				var s:String = "";
+				if (item.SUD_ANS_NEXT_QUE_CODE == null)
+				{
+					s = "Опрос завершен";
+				}
+				else
+				{
+					s = item.ANS_TEXT;
+				}
+				return s;
+			}
+			
+			private function getMessage(item:Object):String {
+				
+				var s:String = item.SRS_ANS_VALUE;
+				if ((s == "null") || (s == null)) {	s = "";	}
+				if ((item.QUE_QUT_CODE == "2") || (item.QUE_QUT_CODE == "3")) 
+				{ 
+					s = ""; 
+				}
+				return s;
+			}
+			
+			override public function set data(value:Object):void
+			{
+				super.data = value;
+				if(value != null)
+				{
+					if ((value.SELECTED == "1") && ((value.SRS_ANS_VALUE != "null") || (value.SRS_ANS_VALUE != "")))
+					{
+						decorator = checked;
+					}
+					else
+					{
+						decorator = unchecked;						
+					}
+				}
+			}
+			
+			override protected function drawBackground(unscaledWidth:Number, unscaledHeight:Number):void
+			{
+				//if ((this.data.SELECTED == "1") || (this.data.SRS_ANS_CHECKED == 1))
+				if ((this.data.SELECTED == "1") && ((this.data.SRS_ANS_VALUE != "null") || (this.data.SRS_ANS_VALUE != "")))
+				{
+					super.alpha = 0.7;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					graphics.clear();
+					graphics.beginFill(0xBED600,0.5);
+					graphics.drawRect(0, 0, unscaledWidth, unscaledHeight);
+					graphics.endFill();
+				}
+				else
+				{
+					super.alpha = 1;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+				}	
+			}
+			
+			
+			
+
+			
+		]]>
+	</fx:Script>
+	
+	
+<fx:Declarations>
+	<s:Group width="100%" height="100%">
+		<s:Rect id="myRect" 
+				left="0" right="0" top="0" bottom="0" 
+				alpha="1.0"> 
+			<s:stroke> 
+				<s:SolidColorStroke 
+					color="0xA8C6EE" 
+					weight="1"/> 
+			</s:stroke> 
+			<s:fill> 
+				<!-- Bind the myBGColor property to the fill color. -->
+				<s:SolidColor
+					color="{myBGColor}"/> 
+			</s:fill> 
+		</s:Rect>  
+	</s:Group> 
+</fx:Declarations>
+
+	   
+</s:IconItemRenderer>

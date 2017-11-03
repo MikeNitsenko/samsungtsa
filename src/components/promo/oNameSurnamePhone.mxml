@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:Promo="components.promo.*"
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)"
+		 creationComplete="group1_creationCompleteHandler(event)" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			import com.distriqt.extension.message.Message;
+			import com.distriqt.extension.message.events.MessageSMSEvent;
+			import com.distriqt.extension.message.objects.SMS;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Model.ExternalData;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			import events.Model.ExternalDataEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			import flatspark.enums.ButtonSizeEnum;
+			
+			
+			
+			
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			private var PHONE_NUMBER:String = "";
+			private var requestSender:URLLoader = new URLLoader();
+			private var allowCheckPhoneRequest:Boolean = true;
+			private var focusInOut:Boolean = false;
+			
+			private var t:Timer = new Timer(1000);
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + imgName).url;
+				
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+
+				systemManager.stage.addEventListener(KeyboardEvent.KEY_UP, deviceKeyUpHandler, false, 1000, true);	
+			}
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				switch (Globals.SURVEY_LANG)
+				{
+					case "RUS" : setRussian();
+						break;
+					case "KAZ" : setKazakh();
+						break;
+					default    : setRussian();
+				}
+				
+				Database.addEventListener(QueryEvent.DATA_LOADED, dataLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_RESPONDENTS WHERE RES_VIS_NUMBER  = '" + VIS_NUMBER + "'");
+			}
+			private function dataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, dataLoaded );				
+				try
+				{
+					txtNameFirst.text = e.data.getItemAt(0).RES_NAME;
+					txtNameLast.text = e.data.getItemAt(0).RES_SURNAME;
+					txtPhone.text = (e.data.getItemAt(0).RES_PHONE as String).substr(2,(e.data.getItemAt(0).RES_PHONE as String).length);
+					PHONE_NUMBER = (e.data.getItemAt(0).RES_PHONE as String).substr(2,(e.data.getItemAt(0).RES_PHONE as String).length);
+				}
+				catch (err:Error) {}
+			}
+			
+			private function setRussian():void
+			{
+				this.txtNameFirst.prompt = "Введите имя...";
+				this.txtNameLast.prompt = "Введите фамилию...";
+				this.txtPhone.prompt = "Номер телефона...";
+				this.btnSendSMS.label = "Отправить код";
+				this.lblNumWarning.text = "Напоминаем Вам, что в случае предоставления неправильного номера, Вы не сможете участвовать в активности";
+			}
+			
+			private function setKazakh():void
+			{
+				this.txtNameFirst.prompt = "Аты...";
+				this.txtNameLast.prompt = "Тегі...";
+				this.txtPhone.prompt = "Телефон нөмірі...";
+				this.btnSendSMS.label = "Код жіберу";
+				this.lblNumWarning.text = "KAZ: Напоминаем Вам, что в случае предоставления неправильного номера, Вы не сможете участвовать в активности";
+			}
+			
+			
+			protected function backHandler(event:NavBarEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{
+				var allowNext:Boolean = true;
+				var errMSG:String = "";
+				if (txtNameFirst.text.length == 0)
+				{
+					allowNext = false;
+					errMSG += "Заполните Имя респондента\n";
+				}
+				
+				if (txtNameLast.text.length == 0)
+				{
+					allowNext = false;
+					errMSG += "Заполните Фамилию респондента\n";
+				}
+				
+				if (txtPhone.text.length != 10)
+				{
+					allowNext = false;
+					errMSG += "Введите правильный номер телефона\n";
+				}
+				
+				if (allowNext)
+				{
+					CHECK_PHONE_NUMBER();
+				}
+				else
+				{
+					Globals.showOkDialog("Заполните поля",errMSG);
+				}
+			}
+
+			private function CHECK_PHONE_NUMBER():void
+			{
+				// fall back if we have bad internet connection
+				t = new Timer(1000);
+				t.addEventListener(TimerEvent.TIMER, updateTimer);
+				t.start();					
+					
+				var RES_PHONE:String = "+7" + txtPhone.text;
+
+				var ed:ExternalData = new ExternalData("check_respondent");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, getCheckRespondentHandler, false,0,true);
+				ed.checkRespondentByPhone(RES_PHONE, Globals.SUR_CODE);			
+			}
+			private function getCheckRespondentHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) 
+				{
+					CREATE_RESPONDENT();
+				} 
+				else 
+				{					
+					var RES_PHONE:String = "+7" + txtPhone.text;
+					
+					if (event.data.length > 0)
+					{
+						var timesNum:Number = event.data.length;
+						var maxTries:Number = Number(arrQuestions.getItemAt(0).ANS_WEIGHT);
+						
+						if (timesNum > maxTries)
+						{
+							t.stop();
+							
+							maxTries = (maxTries == 0) ? 1 : maxTries;
+							
+							var alertErrTries:DialogView = Dialog.service.create( 
+								new AlertBuilder()
+								.setCancelable(false)
+								.setTitle( "Повторное участие!!!" )
+								.setMessage( "Превышено максимальное количество возможностей участия в данной активности!\n\n" +
+									"Номер телефона респондента: " + RES_PHONE + "\n" +
+									"Количество попыток участия: " + timesNum.toString() + "\n" +
+									"Максимальное количество возможностей участия: " + maxTries.toString() + "\n\n" +
+									"Запрещено продолжать проведение активности для данного респондента!\n" +
+									"Все собранные данные будут удалены." )
+								.addOption( "OK", DialogAction.STYLE_POSITIVE )
+								.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+								.build()
+							);
+							alertErrTries.addEventListener( DialogViewEvent.CLOSED, errTriesListener );
+							alertErrTries.show();
+						} 
+						else 
+						{
+							var timesStr:String = "раз";
+							var lastChar:String = timesNum.toString().substr(timesNum.toString().length-1,timesNum.toString().length);
+							
+							if ((timesNum < 10) || (timesNum > 20))
+							{
+								if ((lastChar == "2") || (lastChar == "3") || (lastChar == "4"))
+								{
+									timesStr = "раза";
+								}
+							}
+
+							var alert:DialogView = Dialog.service.create( 
+								new AlertBuilder()
+								.setCancelable(false)
+								.setTitle( "Повторное участие" )
+								.setMessage( "Респондент с номером " + RES_PHONE + " уже участвовал в данной активности " + event.data.length.toString() + " " + timesStr + "\n" +
+									"\nДля продолжения опроса нажмите ОК." +
+									"\nДля выхода из опроса нажмите Отмена. Данные респондента не будут сохранены" )
+								.addOption( "OK", DialogAction.STYLE_POSITIVE )
+								.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+								.build()
+							);
+							alert.addEventListener( DialogViewEvent.CLOSED, respRepeatAlert_closedHandler );
+							alert.show();
+						}					
+					}
+					else
+					{
+						CREATE_RESPONDENT();
+					}
+				}
+			}
+			
+			private function respRepeatAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, respRepeatAlert_closedHandler );
+				alert.dispose();
+				
+				if (event.index == 1) 
+				{ 					
+					CREATE_RESPONDENT();
+				} 
+				else 
+				{
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.DELETE_EVENT,true,false));
+				}				
+			}
+
+			private function errTriesListener(event:DialogViewEvent):void
+			{
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, errTriesListener );
+				alert.dispose();
+				
+				if (event.index == 1) 
+				{ 					
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.DELETE_EVENT,true,false));
+				} 
+			}
+			
+		
+			private function CREATE_RESPONDENT():void
+			{
+				Globals.loadingClose();
+				t.stop();
+				
+				var RES_NAME:String = txtNameFirst.text;
+				var RES_SURNAME:String = txtNameLast.text;
+				var RES_PHONE:String = "+7" + txtPhone.text;
+				
+				if (PHONE_NUMBER != txtPhone.text)
+				{
+					Globals.SMS_CODE_SENT = false;
+				}
+				else
+				{
+					Globals.SMS_CODE_SENT = true;
+				}
+				
+				var adjArr:ArrayCollection = new ArrayCollection();	
+				var bq:BatchQuery = new BatchQuery();
+				bq.query = "UPDATE ST_RESPONDENTS SET " +					
+					"RES_NAME = '" + RES_NAME + "'," + 
+					"RES_SURNAME = '" + RES_SURNAME + "'," + 
+					"RES_PHONE = '" + RES_PHONE + "' " + 
+					"WHERE " + 
+					"RES_SUR_CODE = " + Globals.SUR_CODE + " AND " + 
+					"RES_VIS_NUMBER = '" + VIS_NUMBER + "'";
+				adjArr.addItem(bq);
+				
+				var bq2:BatchQuery = new BatchQuery();
+				bq2.query = "UPDATE ST_VISIT SET VIS_START_DATE = " +
+					"'" + 
+					Globals.CurrentDateTimeWithMinutesSecondsString() + 
+					"' " +
+					" WHERE VIS_NUMBER = " +
+					"'" + VIS_NUMBER + "'" + ";";
+				adjArr.addItem(bq2);
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			
+			private function SAVE_REG_RESULT_START(e:CheckEvent):void
+			{				
+				if (e.data > 0) 
+				{
+					if (!Globals.SMS_CODE_SENT)
+					{
+						SEND_SMS();
+					}
+
+					Dialog.service.toast("Данные респондента сохранены");
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}	
+				else	
+				{
+					Dialog.service.toast(e.text);
+				}
+			}
+			
+			private function SEND_SMS():void
+			{
+				if (Message.isSMSSupported)
+				{
+					Message.service.addEventListener( MessageSMSEvent.MESSAGE_SMS_CANCELLED, smsEventHandler );
+					Message.service.addEventListener( MessageSMSEvent.MESSAGE_SMS_SENT, smsEventHandler );
+					Message.service.addEventListener( MessageSMSEvent.MESSAGE_SMS_SENT_ERROR, smsEventHandler );
+					
+					var sms:SMS = new SMS();
+					sms.address = "7" + txtPhone.text;
+					sms.message = Globals.SURVEY_CODE;
+					
+					Message.service.sendSMS(sms);
+				}
+			}
+			private function smsEventHandler( event:MessageSMSEvent ):void
+			{
+				trace( event.type +"::"+ event.details + "::"+event.sms.toString() );
+			}
+
+			protected function btnSendSMS_clickHandler(event:MouseEvent):void
+			{
+				CHECK_PHONE_NUMBER();
+			}
+
+			protected function deviceKeyUpHandler(event:KeyboardEvent):void
+			{
+				systemManager.stage.removeEventListener(KeyboardEvent.KEY_UP, deviceKeyUpHandler);
+				var key:uint = event.keyCode;				
+				if (key == Keyboard.BACK)
+				{
+					if(SoftKeyboardTrigger.USER_TRIGGERED.length == 13 && focusInOut==true){
+						event.preventDefault();
+						stage.focus = stage;
+					} else {
+						stage.focus = null;
+					}
+				}
+			}
+			
+			protected function txt_softKeyboardActivateHandler(event:SoftKeyboardEvent):void
+			{
+				/*
+				event.preventDefault();
+				stage.focus = null;
+				setFocus()==true; 
+				*/
+			}
+			
+			protected function txt_softKeyboardDeactivateHandler(event:SoftKeyboardEvent):void
+			{
+				/*
+				event.preventDefault();
+				stage.focus = stage;
+				setFocus()==false;
+				*/
+			}
+			
+			
+			/* TIMER */
+			// it's good practice to separate event handler from functional method
+			private function updateTimer(evt:TimerEvent):void {
+				display (t.currentCount);
+			}
+			
+			private function display ( count : int ) : void {
+				var minutes : int = count / 60; // divide by 60 to get the minutes
+				var seconds : int = count % 60; // use modulo operator to get the "rest"
+				var min : String = minutes < 10 ? "0" + minutes : "" + minutes; // add leading zero if necessary
+				var sec : String = seconds < 10 ? "0" + seconds : "" + seconds;
+				
+				//counter.text = min+":"+sec; // no need to cast to String if you use "" + something
+				//counter.text = "До окончания синхронизации осталось: " + (30 - seconds).toString() + " сек";
+				if (seconds == 10)
+				{
+					t.stop();
+					//this.txtRes.text = "Для завершения опроса нажмите кнопку 'Завершить опрос'";
+					//counter.text = "Завершите опрос";
+					//allowEndSurvey = true;
+					Dialog.service.toast("Не удалось проверить номер телефона респондента. Причина: плохая связь");
+					Globals.SMS_CODE_SENT = true;
+					Globals.RES_CODE_SENT_VIA_SIM = "2";
+					CREATE_RESPONDENT();
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	<s:BitmapImage id="img" scaleMode="stretch" smooth="true" smoothingQuality="high" width="100%" height="100%" />
+	<s:VGroup width="100%" height="80%" gap="0">
+		<Promo:NavBar id="navBar" headerObject="{arrQuestions.getItemAt(0) as Object}" />	
+		<s:VGroup width="100%" height="100%" paddingTop="10">
+			
+			<s:HGroup width="100%" height="90%">
+				<s:VGroup width="50%" height="100%" verticalAlign="middle" horizontalAlign="center" gap="5">
+					<s:TextInput id="txtNameFirst" width="70%" autoCapitalize="all"
+								 prompt="Введите имя..." 							 
+								 returnKeyLabel="done" 
+								 softKeyboardActivate="txt_softKeyboardActivateHandler(event)"
+								 softKeyboardDeactivate="txt_softKeyboardDeactivateHandler(event)"
+								 focusIn="focusInOut=true"
+								 focusOut="focusInOut=false"/>
+					<s:TextInput id="txtNameLast" width="70%" autoCapitalize="all"  
+								 prompt="Введите фамилию..." 
+								 returnKeyLabel="done"
+								 softKeyboardActivate="txt_softKeyboardActivateHandler(event)"
+								 softKeyboardDeactivate="txt_softKeyboardDeactivateHandler(event)"
+								 focusIn="focusInOut=true"
+								 focusOut="focusInOut=false"/>
+				</s:VGroup>
+				<s:VGroup width="50%" height="100%" verticalAlign="middle" horizontalAlign="center" gap="5">
+					<s:HGroup width="70%" gap="0" verticalAlign="middle">
+						<components:ButtonIcon 
+								  label="+7" 						  
+								  height="{ButtonSizeEnum.Large}" 
+								  brand="{BrandColorEnum.Info}" />	
+						<s:TextInput id="txtPhone" width="100%" autoCapitalize="all"  
+									 prompt="Номер телефона..."
+									 softKeyboardType="number"
+									 maxChars="10" 
+									 returnKeyLabel="done"
+									 softKeyboardActivate="txt_softKeyboardActivateHandler(event)"
+									 softKeyboardDeactivate="txt_softKeyboardDeactivateHandler(event)"
+									 focusIn="focusInOut=true"
+									 focusOut="focusInOut=false"/>
+					</s:HGroup>				
+					<components:ButtonIcon id="btnSendSMS" label="Отправить код" width="70%" 
+							  enabled="{txtPhone.text.length == 10 ? true : false}"
+							  click="btnSendSMS_clickHandler(event)"								  
+							  height="{ButtonSizeEnum.Large}" 
+							  brand="{BrandColorEnum.Info}" />	
+				</s:VGroup>
+			</s:HGroup>
+			
+			<s:HGroup width="100%" height="10%" verticalAlign="middle">
+				<s:VGroup width="50%" verticalAlign="middle" horizontalAlign="center" gap="5">					
+				</s:VGroup>
+				<s:VGroup width="50%" verticalAlign="middle" horizontalAlign="center" gap="5">
+					<s:HGroup height="150" width="70%" gap="0">
+						<s:Group width="100%" height="150">
+							<s:Rect width="100%" height="100%" alpha="0.7" radiusX="5" radiusY="5">
+								<s:fill>
+									<s:SolidColor color="0xFFFFFF"/>
+								</s:fill>
+							</s:Rect>
+							<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingLeft="10" paddingRight="10">
+								<s:Label id="lblNumWarning"
+										 width="100%" textAlign="center"/>
+							</s:VGroup>
+						</s:Group>
+					</s:HGroup>				
+				</s:VGroup>
+			</s:HGroup>
+		</s:VGroup>		
+	</s:VGroup>	
+	
+</s:Group>

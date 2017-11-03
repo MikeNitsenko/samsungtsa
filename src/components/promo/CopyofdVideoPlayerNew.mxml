@@ -1,0 +1,241 @@
+<!--
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 creationComplete="group1_creationHandler(event)"
+		 activate="group1_activateHandler(event)"
+		 deactivate="group1_deactivateHandler(event)"
+		 remove="group1_removeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.components.BusyIndicator;
+			import spark.components.Button;
+			import spark.components.HGroup;
+			import spark.components.TextArea;
+			import spark.components.VGroup;
+			import spark.components.VideoDisplay;
+			
+			import classes.Globals;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			
+			import org.osmf.events.TimeEvent;
+			import org.osmf.utils.OSMFSettings;
+
+			[SWF(backgroundColor="#000000")]
+
+			public var $playerInstance:StrobeMediaPlayback;
+			private var _stage:Stage;
+			private var _parameters:Object;			
+
+			private var btnDuration:Button = new Button();
+			private var txt:TextArea = new TextArea();
+			private var btnStart:Button = new Button();
+			private var btnStop:Button = new Button();
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			private var myVid:VideoDisplay = new VideoDisplay();
+			
+			private var nb:NavBar = new NavBar();
+			private var bi:BusyIndicator = new BusyIndicator();
+			
+			protected function group1_creationHandler(event:FlexEvent):void
+			{
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+				
+				myVid = new VideoDisplay();
+				var videoFileName:String = arrQuestions.getItemAt(0)[Globals.QUE_PHOTO_LANG];
+				var f:File = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + videoFileName);
+				
+				if (arrQuestions.getItemAt(0)["QUE_WEIGHT"] == "1") {
+					Globals.VIDEO_PLAY_COMPLETED = true;
+				} else {
+					Globals.VIDEO_PLAY_COMPLETED = false;
+				}
+				
+				OSMFSettings.enableStageVideo = false;
+				
+				if ((f.exists) && (f.extension == "mp4"))
+				{
+					myVid.source = f.url;
+					
+					myVid.addEventListener(TimeEvent.COMPLETE, videoEnd);
+					myVid.addEventListener(TimeEvent.CURRENT_TIME_CHANGE,timeChange);
+
+					myVid.percentHeight = 100;
+					myVid.percentWidth = 100;
+					this.addElement(myVid);
+					
+					var vgBI:VGroup = new VGroup();
+					vgBI.percentHeight = 100;
+					vgBI.percentWidth = 100;
+					vgBI.verticalAlign = "middle";
+					vgBI.horizontalAlign = "center";
+					this.addElement(vgBI);
+					
+					bi = new BusyIndicator();
+					vgBI.addElement(bi);
+					
+					// placeholder for subitems
+					var vgMain:VGroup = new VGroup();
+					vgMain.percentWidth = 100;
+					vgMain.percentHeight = 100;
+					this.addElement(vgMain);
+					
+					try
+					{
+						nb = new NavBar();
+						nb.visible = Globals.VIDEO_PLAY_COMPLETED;
+						nb.NEXT_ENABLED = Globals.VIDEO_PLAY_COMPLETED;
+						nb.headerObject = arrQuestions.getItemAt(0);
+						vgMain.addElement(nb);
+					}
+					catch (err:Error)
+					{
+						Dialog.service.toast(err.getStackTrace());
+					}
+
+					var hg:HGroup = new HGroup();
+					hg.percentHeight = 100;
+					hg.percentWidth = 100;
+					vgMain.addElement(hg);
+					
+					// Play/Pause button group
+					var hgPlayPause:HGroup = new HGroup();
+					hgPlayPause.percentHeight = 100;
+					hgPlayPause.percentWidth = 50;
+					hgPlayPause.horizontalAlign = "left";
+					hgPlayPause.verticalAlign = "bottom";
+					hg.addElement(hgPlayPause);
+					
+					btnStart.alpha = 0.5;
+					btnStart.percentWidth = 50;
+					btnStart.label = "Воспроизведение";
+					btnStart.visible = false;
+					btnStart.includeInLayout = false;
+					btnStart.addEventListener(MouseEvent.CLICK,btnStartClick);
+					hgPlayPause.addElement(btnStart);
+					
+					btnStop.alpha = 0.5;
+					btnStop.percentWidth = 50;
+					btnStop.label = "Пауза";				
+					btnStop.addEventListener(MouseEvent.CLICK,btnStopClick);
+					hgPlayPause.addElement(btnStop);
+				}
+				else
+				{
+					nb = new NavBar();
+					nb.visible = true;
+					nb.NEXT_ENABLED = true;
+					nb.TEXT = "Видео не загружено: пропустите вопрос";
+					nb.headerObject = null;
+					this.addElement(nb);
+				}
+			}
+			
+			private function timeChange(e:TimeEvent):void
+			{
+				bi.visible = false;
+			}
+			
+			protected function backHandler(event:NavBarEvent):void
+			{
+				emptyCache();
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{
+				emptyCache();
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+			}
+			
+			private function videoEnd(e:TimeEvent):void
+			{
+				btnStart.visible = true;
+				btnStart.includeInLayout = true;
+				btnStop.visible = false;
+				btnStop.includeInLayout = false;
+				
+				nb.visible = true;
+				nb.NEXT_ENABLED = true;
+				
+				Globals.VIDEO_PLAY_COMPLETED = true;
+				
+				emptyCache();
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+			}
+			
+			
+			private function btnStopClick(e:MouseEvent):void
+			{
+				pauseVideo();
+			}
+			private function pauseVideo():void
+			{
+				btnStart.visible = true;
+				btnStart.includeInLayout = true;
+				btnStop.visible = false;
+				btnStop.includeInLayout = false;
+				//$playerInstance.player.pause();
+				myVid.pause();
+			}
+			
+			private function btnStartClick(e:MouseEvent):void
+			{
+				playVideo();
+			}
+			private function playVideo():void
+			{
+				btnStart.visible = false;
+				btnStart.includeInLayout = false;
+				btnStop.visible = true;
+				btnStop.includeInLayout = true;
+				//$playerInstance.player.play();	
+				myVid.play();
+			}
+			
+			private function emptyCache():void
+			{
+				//$playerInstance.player.stop();
+				try
+				{
+					myVid.stop();
+					myVid = null;
+				}
+				catch (err:Error) { trace("VIDEO EMPTY CACHE ERROR: " + err.getStackTrace()); } 
+			}
+
+			protected function group1_deactivateHandler(event:Event):void
+			{
+				pauseVideo();
+			}
+			
+			protected function group1_removeHandler(event:FlexEvent):void
+			{
+				emptyCache();
+			}
+			
+			
+			
+			protected function group1_activateHandler(event:Event):void
+			{
+				Dialog.service.toast("Воспроизведение видео продолжено");
+				playVideo();
+			}
+			
+		]]>
+	</fx:Script>
+	
+</s:Group>
+//-->

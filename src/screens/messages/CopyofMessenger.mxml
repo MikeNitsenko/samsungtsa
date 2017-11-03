@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.TextViewAlertBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			
+			[Bindable] private var acMessages:ArrayCollection = new ArrayCollection();
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+
+			}
+
+			
+			protected function btnNewMessage_clickHandler(event:MouseEvent):void
+			{
+				var textViewAlert:DialogView = Dialog.service.create( 
+					new TextViewAlertBuilder()
+					.setTitle( "Новое сообщение" )
+					.setMessage( "Сообщение будет отправлено Вашему супервайзеру" )
+					.addOption( "ОТПРАВИТЬ", DialogAction.STYLE_POSITIVE, 0 )
+					.addOption( "ОТМЕНА", DialogAction.STYLE_CANCEL )
+					.setCancelable(false)
+					.build()
+				);
+				textViewAlert.addEventListener( DialogViewEvent.CLOSED, textViewAlert_closedHandler );
+				textViewAlert.show();
+				
+				/*
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setTitle( "Новое сообщение" )
+					.setMessage( "Сообщение будет отправлено Вашему супервайзеру" )
+					.addTextField("", "Ваше сообщение...", true, com.distriqt.extension.dialog.KeyboardType.NUMBER_PAD, true)
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+
+				alert.addEventListener( DialogViewEvent.CLOSED, textViewAlert_closedHandler );
+				alert.show();
+				*/
+			}
+			
+			private function textViewAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				trace("text view closed: " + event.index +"::"+ event.values.join(",") );
+				
+				if (event.index == 1) {
+					var o:Object = new Object();
+					o["MESSAGE_HEADER"] = event.values.join(",");
+					if ( (o["MESSAGE_HEADER"] as String).length > 0) {
+						acMessages.addItem(o);
+					}
+				}
+
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, textViewAlert_closedHandler );
+				alert.dispose();
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="Сообщения" backVisible="true" messagesVisible="false" />
+	
+	
+	
+	<s:VGroup padding="5" width="100%" height="100%">
+		<components:ButtonIcon id="btnNewMessage"							   
+							   label="НОВОЕ СООБЩЕНИЕ"
+							   width="100%"
+							   height="10%"
+							   brand="{BrandColorEnum.Primary}"
+							   click="btnNewMessage_clickHandler(event)" />
+		
+		<s:Panel title="Ваши сообщения" width="100%" height="90%">
+			<s:List id="lstMessages"
+					labelField="MESSAGE_HEADER"
+					dataProvider="{acMessages}"
+					width="100%" height="100%" />
+		</s:Panel>
+	</s:VGroup>
+</s:VGroup>

@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  xmlns:system="components.system.*"
+		  xmlns:components="flatspark.components.*"
+		  width="100%" height="100%" creationComplete="vgroup1_creationCompleteHandler(event)"
+		  gap="0" preinitialize="vgroup1_preinitializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.cameraui.AuthorisationStatus;
+			import com.distriqt.extension.cameraui.CameraUI;
+			import com.distriqt.extension.cameraui.CameraUIOptions;
+			import com.distriqt.extension.cameraui.MediaType;
+			import com.distriqt.extension.cameraui.events.AuthorisationEvent;
+			import com.distriqt.extension.cameraui.events.CameraUIEvent;
+			import com.distriqt.extension.dialog.Dialog;
+			import com.primebridge.ane.DeleteController;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Model.ExternalData;
+			import classes.Utils.QueryConstructor;
+			
+			import events.MainNavEvent;
+			import events.Model.ExternalDataEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			import flatspark.enums.ButtonSizeEnum;
+			
+			import jp.shichiseki.exif.ExifLoader;
+			
+			private var deleteController:DeleteController = DeleteController.instance;
+			
+			[Bindable] private var PICTURE_TAKEN:Boolean = false;
+			private var loader:ExifLoader = new ExifLoader();
+			private var mainPhotoPath:String = "";
+			private var imgOrientation:int = 1;
+			private var fName:String = "";
+			private var fURL:String = "";
+
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				com.distriqt.extension.cameraui.CameraUI.service.addEventListener( AuthorisationEvent.CHANGED, authorisationStatus_changedHandler );
+
+				switch (com.distriqt.extension.cameraui.CameraUI.service.authorisationStatus())
+				{
+					case AuthorisationStatus.SHOULD_EXPLAIN:
+					case AuthorisationStatus.NOT_DETERMINED:
+						// REQUEST ACCESS: This will display the permission dialog
+						trace("REQUEST ACCESS: This will display the permission dialog");
+						com.distriqt.extension.cameraui.CameraUI.service.requestAuthorisation();
+						return;
+						
+					case AuthorisationStatus.DENIED:
+					case AuthorisationStatus.UNKNOWN:
+					case AuthorisationStatus.RESTRICTED:
+						// ACCESS DENIED: You should inform your user appropriately
+						trace("ACCESS DENIED: You should inform your user appropriately");
+						return;
+						
+					case AuthorisationStatus.AUTHORISED:
+						// AUTHORISED: Camera will be available
+						trace("AUTHORISED: Camera will be available");
+						break;  
+					default:
+						trace("Didn't find matches: " + com.distriqt.extension.cameraui.CameraUI.service.authorisationStatus());
+						com.distriqt.extension.cameraui.CameraUI.service.requestAuthorisation();
+						break;
+				}
+				
+				lblHint.text = "При съемке используйте фронтальную камеру.\n" +
+								"После съемки нажмите кнопку [ПРОДОЛЖИТЬ] для начала работы";
+			}
+			
+			private function authorisationStatus_changedHandler( event:AuthorisationEvent ):void
+			{
+				trace( "authorisationStatus_changedHandler: "+event.status );
+			}
+
+			protected function btnTakePicture_clickHandler(event:MouseEvent):void
+			{
+				if (com.distriqt.extension.cameraui.CameraUI.isSupported)
+				{
+					com.distriqt.extension.cameraui.CameraUI.service.addEventListener( CameraUIEvent.COMPLETE, cameraUI_completeHandler );
+					com.distriqt.extension.cameraui.CameraUI.service.addEventListener( CameraUIEvent.CANCEL, cameraUI_cancelHandler );		
+					
+					var options:CameraUIOptions = new CameraUIOptions();					
+					options.saveToCameraRoll = true;				
+					com.distriqt.extension.cameraui.CameraUI.service.launch(com.distriqt.extension.cameraui.MediaType.IMAGE, options);
+				}
+				else
+				{
+					Globals.showOkDialog("Ошибка камеры", "Похоже, на Вашем устройстве не поддерживается камера");
+				}
+			}
+			
+			private function cameraUI_completeHandler( event:CameraUIEvent ):void
+			{
+				com.distriqt.extension.cameraui.CameraUI.service.removeEventListener( CameraUIEvent.COMPLETE, cameraUI_completeHandler );
+				com.distriqt.extension.cameraui.CameraUI.service.removeEventListener( CameraUIEvent.CANCEL, cameraUI_cancelHandler );	
+				
+				Globals.activityShow();
+				
+				trace("orientation: " + event.orientation.toString());
+				trace("path: " + event.path);
+				
+				mainPhotoPath = event.path;
+				imgOrientation = event.orientation;
+
+				switch(event.orientation)
+				{
+					case 1: imgTaken.rotation = 0;
+						break;
+					case 3: imgTaken.rotation = 180;
+						break;
+					case 6: imgTaken.rotation = 90;
+						break;
+					case 8: imgTaken.rotation = -90;
+						break;
+					default:
+						break;
+				}
+				
+				loader = new ExifLoader();
+				loader.contentLoaderInfo.addEventListener(Event.COMPLETE, savePictureHandler);
+				loader.load(new URLRequest(event.path));
+			}
+			
+			private function savePictureHandler(event:Event):void
+			{
+				var bigBMD:BitmapData = Bitmap(event.currentTarget.content).bitmapData;
+				bigBMD.draw(loader.content, new Matrix(),null,null,null,true);
+				
+				var maxW:Number = bigBMD.width > bigBMD.height ? bigBMD.width : bigBMD.height;
+				
+				var scale:Number = 800/maxW;
+				var matrix:Matrix = new Matrix();
+				matrix.scale(scale, scale);
+				
+				var smallBMD:BitmapData = new BitmapData(bigBMD.width * scale, bigBMD.height * scale, true, 0x000000);
+				smallBMD.draw(bigBMD, matrix, null, null, null, true);
+				
+				var bitmap:Bitmap = new Bitmap(smallBMD,PixelSnapping.NEVER,true);
+				
+				var ba:ByteArray = new ByteArray();
+				smallBMD.encode(smallBMD.rect,new JPEGEncoderOptions,ba);
+				
+				var file:File = File.documentsDirectory.resolvePath("TSA_PROMO/photos/" + Globals.USE_CODE + "_" + Globals.getRawDateString() + "_" + imgOrientation.toString() + ".jpg");
+				var fs:FileStream = new FileStream();
+				
+				try
+				{
+					fs.open(file,FileMode.WRITE);
+					fs.writeBytes(ba,0,ba.length);
+					fs.close();
+				}
+				catch (err:Error)
+				{
+					Dialog.service.toast(err.getStackTrace());
+				}	
+
+				trace("optimized file url: " + file.url);
+				trace("optimized file native path: " + file.nativePath);
+				
+				PICTURE_TAKEN = true;
+				
+				fName = file.name;
+				fURL = file.url;
+				
+				imgTaken.alpha = 1;
+				imgTaken.source = file.url;
+				
+				deleteController.deleteFile(mainPhotoPath.replace("file://",""));
+				
+				loader.contentLoaderInfo.removeEventListener(Event.COMPLETE, savePictureHandler);
+				
+				// insert photo info
+				var adjArr:ArrayCollection = new ArrayCollection();				
+				var bq:BatchQuery = new BatchQuery();
+				bq.query = QueryConstructor.buildInsertVisitPhoto(Globals.VIS_NUMBER,fURL,fName);
+				adjArr.addItem(bq);
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, insertVisitPhotoHandler );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, insertVisitPhotoHandler, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function insertVisitPhotoHandler(e:CheckEvent):void
+			{
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, insertVisitPhotoHandler );
+				Globals.activityDismiss();
+				
+				if (e.data > 0) 
+				{		
+					Dialog.service.toast("Фото сохранено");
+				}	
+				else	
+				{
+					Dialog.service.toast("Ошибка сохранения фото: " + e.text);
+				}
+			}
+
+			private function cameraUI_cancelHandler( event:CameraUIEvent ):void
+			{
+				trace( "user cancel" );
+			}
+
+			protected function btnProceed_clickHandler(event:MouseEvent):void
+			{
+				START_PART_SYNC();
+			}
+			
+			/* ===============================================			
+			PART SYNC
+			=================================================*/	
+			private function START_PART_SYNC():void
+			{
+				writeLog("Начало синхронизации. Авторизация пользователя");
+				// call for IMEI
+				var ed:ExternalData = new ExternalData("get_auth");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, imeiAuthLoaded,false,0,true);
+				ed.getAuth(Globals.USE_IMEI);
+			}			
+			private function imeiAuthLoaded(event:ExternalDataEvent):void
+			{
+				if (event.hasError) {
+					writeLog(event.errorText);
+					moveToNextStep();
+				} else {					
+					writeLog("Отправка файла лога");
+					prepareUploadSyncData();
+				}
+			}
+			
+			/* ===============================================			
+			PREPARE AND SEND UPLOAD SYNC DATA		
+			=================================================*/	
+			
+			private function prepareUploadSyncData():void
+			{
+				var ed:ExternalData = new ExternalData("sync_file_upload");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, sendUploadSyncFileHandler, false,0,true);
+				ed.sendUploadSyncFile("P");
+			}
+			private function sendUploadSyncFileHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) {
+					writeLog(event.errorText);
+					moveToNextStep();
+				} else {					
+					sendUnzipToServer(event.data.getItemAt(0).FILENAME);
+				}
+			}
+			
+			/* ===============================================			
+			SEND UNZIP AND WRITE COMMAND TO SERVER		
+			=================================================*/	
+			
+			private function sendUnzipToServer(zipFileName:String):void
+			{
+				writeLog("Отправка команды записи данных в базу");
+				
+				try // remove file
+				{
+					File.documentsDirectory.resolvePath("TSA_PROMO/" + zipFileName).deleteFile();
+				} catch (err:Error) { trace(err.getStackTrace()); }
+				
+				var ed:ExternalData = new ExternalData("write_file_data");
+				ed.addEventListener(ExternalDataEvent.DATA_LOADED, sendUnzipToServerHandler, false,0,true);
+				ed.sendUnzipAndWrite(zipFileName);
+			}
+			private function sendUnzipToServerHandler(event:ExternalDataEvent):void
+			{
+				if (event.hasError) 
+				{
+					writeLog(event.errorText);					
+				} 
+				else 
+				{
+					writeLog("Отправка данных опроса завершена.\nДля завершения опроса нажмите кнопку [Завершить опрос]");
+				}
+				moveToNextStep();
+			}
+			
+			private function writeLog(message:String):void
+			{
+				trace(message);
+			}
+			
+			/* ===============================================			
+			MOVE TO THE NEXT STEP		
+			=================================================*/	
+			private function moveToNextStep():void
+			{
+				Globals.loadingClose();
+				dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"903"));	
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" backVisible="true" messagesVisible="false"
+						 titleText="Сделайте фото"/>
+	
+	<s:VGroup width="100%" height="10%" padding="5">
+		<components:ButtonIcon id="btnProceed" width="100%" height="100%" label="ПРОДОЛЖИТЬ"
+							   enabled="{PICTURE_TAKEN}" 
+							   brand="{BrandColorEnum.Primary}" 
+							   click="btnProceed_clickHandler(event)"/>
+	</s:VGroup>	
+	<s:VGroup width="100%" height="90%" paddingBottom="5" paddingLeft="5" paddingRight="5">
+		<s:Panel width="100%" height="20%" title="Пожалуйста сделайте фото">
+			<s:VGroup width="100%" height="100%" padding="5">
+				<s:Label id="lblHint" width="100%"/>
+			</s:VGroup>
+		</s:Panel>	
+		<s:Panel id="panPhoto" width="100%" height="80%" title="Фото">
+			<s:VGroup id="vgPhoto" width="100%" height="100%" click="btnTakePicture_clickHandler(event)">
+				<s:BitmapImage id="imgTaken" width="100%" height="100%"
+							   alpha="0.4" scaleMode="letterbox"
+							   smooth="true" smoothingQuality="high" source="assets/images/system/takephoto.png"/>
+			</s:VGroup>			
+		</s:Panel>
+		<components:ButtonIcon id="btnTakePicture" width="100%" height="{ButtonSizeEnum.Large}"
+							   label="СНЯТЬ ФОТО" brand="{BrandColorEnum.Default}"
+							   click="btnTakePicture_clickHandler(event)"/>
+	</s:VGroup>
+</s:VGroup>

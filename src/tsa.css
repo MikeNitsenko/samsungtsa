@@ -1,0 +1,52 @@
+/* CSS file */
+@namespace s "library://ns.adobe.com/flex/spark";
+
+
+s|List {
+	alternatingItemColors:#F9F9F9,#FFFFFF;
+}
+
+s|LabelItemRenderer
+{
+	fontWeight:bold;
+	color:#333333;
+}
+
+s|IconItemRenderer
+{
+	messageStyleName:messageFontStyle;
+}
+
+.messageFontStyle 
+{ 
+	fontWeight:normal;
+}
+
+s|Panel
+{
+	skinClass: ClassReference("flatspark.skins.PanelSkin");
+}
+
+s|Button
+{
+	skinClass: ClassReference("flatspark.skins.ButtonSkin");
+}
+
+s|TextInput
+{
+	contentBackgroundAlpha: 1;
+	contentBackgroundColor: #FFFFFF;
+}
+
+@font-face {
+	fontFamily:             FontAwesome;
+	embed-as-cff:           true;
+	src:                    url("/assets/fonts/FontAwesome.otf");
+	fontStyle:              normal;
+}
+@font-face {
+	fontFamily:             FontAwesomeNonCff;
+	embed-as-cff:           false;
+	src:                    url("/assets/fonts/FontAwesome.otf");
+	fontStyle:              normal;
+}

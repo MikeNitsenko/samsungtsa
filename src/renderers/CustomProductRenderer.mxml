@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					xmlns:s="library://ns.adobe.com/flex/spark"  
+					labelField="PRO_NAME" 
+					iconPlaceholder="@Embed('assets/images/system/nophoto.png')"
+					iconWidth="100" 
+					iconHeight="100"
+					messageFunction="msgFunction"
+					iconFunction="getImage"
+					iconScaleMode="letterbox"
+					initialize="iconitemrenderer1_initializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			[Embed(source="assets/images/system/checked.png")]  
+			public var checked:Class;
+			
+			[Embed(source="assets/images/system/next.png")] 
+			public var next:Class;	
+			
+			protected function iconitemrenderer1_initializeHandler(event:FlexEvent):void
+			{
+
+			}
+			
+			private function getImage(item:Object):String 
+			{
+				return File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + item.PRO_PHOTO).url;
+			}
+			
+			protected function msgFunction(item:Object):String
+			{
+				var s:String = "Вендор: " + item.VEN_NAME + "\nТип: " + item.PRT_NAME;
+				if (item.PRO_ACTUAL_PRICE != null)
+				{
+					if (item.PRO_ACTUAL_PRICE == "0") {
+						s += "\nПродукт отсутствует";
+					} else {
+						s += "\nЦена: " + PrepForDisplay.format(item.PRO_ACTUAL_PRICE) + " KZT";
+					}
+				}
+				return s;
+			}
+			
+			override public function set data(value:Object):void
+			{
+				super.data = value;
+				if(value != null)
+				{
+					if (value.PRO_ACTUAL_PRICE != null)
+					{
+						decorator = checked;
+					}
+					else
+					{
+						decorator = next;						
+					}
+				}
+			}
+			
+			override protected function drawBackground(unscaledWidth:Number, unscaledHeight:Number):void
+			{
+				if (this.data.PRO_ACTUAL_PRICE != null) 
+				{
+					super.alpha = 1;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					graphics.clear();
+					graphics.beginFill(0x2ECC71,0.5);
+					graphics.drawRect(0, 0, unscaledWidth, unscaledHeight);
+					graphics.endFill();
+				}
+				else
+				{
+					super.alpha = 1;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+				}	
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Declare and define parameters for the NumberFormatter.-->
+		<s:NumberFormatter id="PrepForDisplay"
+						   groupingPattern="###"
+						   groupingSeparator=" "
+						   useGrouping="true" />
+	</fx:Declarations>
+	
+</s:IconItemRenderer>

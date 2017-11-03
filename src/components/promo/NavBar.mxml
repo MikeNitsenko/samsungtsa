@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 width="100%" height="10%"
+		 creationComplete="group1_creationCompleteHandler(event)" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			import flatspark.enums.ButtonSizeEnum;
+			
+			[Bindable] public var firstScreenMode:Boolean = false;
+			[Bindable] public var TEXT:String = "";
+			[Bindable] public var BACK_ENABLED:Boolean = true;
+			[Bindable] public var BACK_VISIBLE:Boolean = true;
+			[Bindable] public var NEXT_VISIBLE:Boolean = true;
+			[Bindable] public var NEXT_ENABLED:Boolean = true;
+			[Bindable] public var headerObject:Object = new Object;
+			
+			protected function btnBack_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new NavBarEvent(NavBarEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function btnNext_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new NavBarEvent(NavBarEvent.NEXT_EVENT, true, false));
+			}
+			
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				if (headerObject != null)
+				{
+					this.TEXT = headerObject[Globals.QUE_TEXT_LANG];
+					switch (Globals.SURVEY_LANG)
+					{
+						case "RUS" : setRussian();
+							break;
+						case "KAZ" : setKazakh();
+							break;
+						default    : setRussian();
+					}	
+				}				 
+			}
+			
+			private function setRussian():void
+			{
+				this.btnBack.label = "Назад";
+				this.btnNext.label = "Вперед";
+			}
+			
+			private function setKazakh():void
+			{
+				this.btnBack.label = "Артқа";
+				this.btnNext.label = "Алға";
+			}
+			
+			protected function btnExit_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.DELETE_EVENT,true,false));
+			}
+			
+			
+		]]>
+	</fx:Script>
+	<s:Rect width="100%" height="100%" alpha="0.85">
+		<s:fill>
+			<s:SolidColor color="0xFFFFFF"/>
+		</s:fill>
+	</s:Rect>
+	<s:HGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center"
+			  paddingBottom="10" paddingRight="10" paddingTop="10" paddingLeft="10">
+
+			<components:ButtonIcon id="btnBack" 
+					  enabled="{BACK_ENABLED}"
+					  includeInLayout="{BACK_VISIBLE}"
+					  visible="{BACK_VISIBLE}"
+					  label="Назад" 
+					  height="{ButtonSizeEnum.Large}" 
+					  brand="{BrandColorEnum.Info}"
+					  alpha="0.5"
+					  click="btnBack_clickHandler(event)" />
+			<components:ButtonIcon id="btnExit" 
+				  enabled="{firstScreenMode}"
+				  includeInLayout="{firstScreenMode}"
+				  visible="{firstScreenMode}"
+				  label="Выход / Шығу" 
+				  height="{ButtonSizeEnum.Large}" 
+				  brand="{BrandColorEnum.Info}"
+				  alpha="0.5"
+				  click="btnExit_clickHandler(event)" />
+
+		<s:Label id="lblTitleText" text="{TEXT}" 
+				 textAlign="center" width="100%"
+				 color="0x004f94" fontWeight="bold"/>
+
+			<components:ButtonIcon id="btnNext" 
+					  visible="{NEXT_VISIBLE}"
+					  enabled="{NEXT_ENABLED}"
+					  label="Вперед" 
+					  height="{ButtonSizeEnum.Large}" 
+					  brand="{BrandColorEnum.Info}"
+					  alpha="0.5"
+					  click="btnNext_clickHandler(event)" />
+
+	</s:HGroup>
+</s:Group>

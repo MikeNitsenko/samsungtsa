@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="10%"
+		 creationComplete="group1_creationCompleteHandler(event)" 
+		 xmlns:system="assets.images.system.*" xmlns:Utils="classes.Utils.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			import events.MainNavEvent;
+			
+			[Bindable] public var titleText:String = "TSA Promo Mobile " + Globals.VERSION_NUMBER;
+			[Bindable] public var backVisible:Boolean = false;
+			[Bindable] public var messagesVisible:Boolean = true;
+			
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				
+			}
+			
+			protected function hgroup1_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,true));
+				//dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function hgMessages_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"999"));
+			}
+			
+		]]>
+	</fx:Script>
+	<s:Rect width="100%" height="100%">
+		<s:fill>
+			<s:SolidColor color="{Globals.MAIN_COLOR}"/>
+		</s:fill>
+	</s:Rect>
+	<!-- ActionBar Main Container //-->
+	<s:HGroup width="100%" height="100%">
+		<s:HGroup visible="{backVisible}" width="20%" height="100%" 
+				  verticalAlign="middle" horizontalAlign="left" 
+				  click="hgroup1_clickHandler(event)">
+			<s:Label id="icon" 
+					 text="&#xf053;" 
+					 color="#FFFFFF" 
+					 width="100%" height="100%"
+					 fontFamily="FontAwesome"
+					 verticalAlign="middle" textAlign="center" />
+			<s:Line height="100%" alpha="0.5">
+				<s:stroke>
+					<s:SolidColorStroke color="#FFFFFF" weight="1" caps="square"/>
+				</s:stroke>
+			</s:Line>
+		</s:HGroup>		
+		<s:HGroup width="60%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingLeft="10">
+			<s:Label id="lblTitle" 
+					 width="100%" height="100%" 
+					 text="{titleText}" 
+					 color="0xFFFFFF"
+					 fontWeight="bold"
+					 verticalAlign="middle" textAlign="center" />
+		</s:HGroup>		
+		<s:HGroup id="hgMessages" 
+				  	visible="{messagesVisible}"
+					width="20%" height="100%" verticalAlign="middle" horizontalAlign="right" paddingRight="10"
+					click="hgMessages_clickHandler(event)">
+			<s:Line height="100%" alpha="0.5">
+				<s:stroke>
+					<s:SolidColorStroke color="#FFFFFF" weight="1" caps="square"/>
+				</s:stroke>
+			</s:Line>
+			<s:Label id="lblMessages" 
+					 text="&#xf003; (0)"
+					 width="100%" height="100%" 
+					 color="0xFFFFFF"
+					 fontFamily="FontAwesome"
+					 verticalAlign="middle" textAlign="center" />
+		</s:HGroup>
+		
+	</s:HGroup>
+</s:Group>

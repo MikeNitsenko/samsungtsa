@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.TextOperationEvent;
+			
+			import classes.Globals;
+			import classes.Model.Database;
+			
+			import events.MainNavEvent;
+			import events.Model.QueryEvent;
+			
+			[Bindable] private var arrSalepoints:ArrayCollection = new ArrayCollection();
+						
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{				
+				Database.addEventListener(QueryEvent.DATA_LOADED, arrSalepointsLoaded, false, 0, true);
+				Database.init("SELECT * FROM VIEW_ST_SALEPOINT");
+			}
+			private function arrSalepointsLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, arrSalepointsLoaded );
+				arrSalepoints = e.data;		
+				
+				if (e.data.length == 0) {
+					Dialog.service.toast("Нет данных для отображения");
+				}
+			}
+			
+			protected function txtFilter_changeHandler(event:TextOperationEvent):void
+			{
+				arrSalepoints.filterFunction = filterSalepoints;
+				arrSalepoints.refresh();
+			}
+			
+			private function filterSalepoints(item:Object):Boolean 
+			{
+				var result:Boolean = false;
+				
+				var itemSalName:String = "";
+				var itemSalOwner:String = "";
+				var itemSalHouse:String = "";
+				
+				var searchString:String = txtFilter.text.toLowerCase();
+				
+				try {	itemSalName		= 	(item.SAL_NAME as String).toLowerCase();		} catch (err1:Error) {		}
+				try {	itemSalOwner 	= 	(item.SAL_OWNER as String).toLowerCase();		} catch (err2:Error) {		}
+				try {	itemSalHouse 	= 	(item.SAL_HOUSE as String).toLowerCase();		} catch (err3:Error) {		}
+				
+				if ((itemSalName.indexOf(searchString) > -1) || (itemSalOwner.indexOf(searchString) > -1) || (itemSalHouse.indexOf(searchString) > -1))
+				{
+					result = true;
+				}
+				
+				return result;
+			}
+			
+						
+			
+			protected function lstSalepoints_clickHandler(event:MouseEvent):void
+			{
+				if (lstSalepoints.selectedIndex > -1) {
+					Globals.SAL_CODE = lstSalepoints.selectedItem.SAL_CODE;
+					Globals.SAL_ID = lstSalepoints.selectedItem.SAL_ID;
+					Globals.SAL_NAME = lstSalepoints.selectedItem.SAL_NAME;
+					Globals.SAL_CHA_CODE = lstSalepoints.selectedItem.SAL_CHA_CODE;
+					
+					dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"901"));
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="Выбор торговой точки" backVisible="true" />
+	<s:VGroup width="100%" height="100%" padding="5">		
+		<s:TextInput id="txtFilter" 
+					 width="100%" 
+					 prompt="Фильтр по коду, названию или адресу ТТ..." change="txtFilter_changeHandler(event)" />
+		<s:Panel title="Все торговые точки ({arrSalepoints.length.toString()})" width="100%" height="100%">
+			<s:List id="lstSalepoints" width="100%" height="100%"
+					dataProvider="{arrSalepoints}"
+					labelField="SAL_NAME" 
+					itemRenderer="renderers.SalepointsRenderer"
+					click="lstSalepoints_clickHandler(event)">
+			</s:List>
+		</s:Panel>
+	</s:VGroup>	
+	
+</s:VGroup>

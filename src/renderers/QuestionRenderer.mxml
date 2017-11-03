@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+					xmlns:s="library://ns.adobe.com/flex/spark"
+					iconHeight="64" iconWidth="64"
+					preinitialize="iconitemrenderer1_preinitializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.application.Application;
+			
+			import mx.events.FlexEvent;
+			
+			
+			protected function iconitemrenderer1_preinitializeHandler(event:FlexEvent):void
+			{
+				this.minHeight = Math.ceil(Application.service.device.displayMetrics.screenHeight*0.05);
+			}
+			
+			override protected function drawBackground(unscaledWidth:Number, unscaledHeight:Number):void
+			{				
+				if ((this.data.SELECTED == "1") || (this.data.SRS_ANS_VALUE == "1"))
+				{
+					// transparent background for hit detection
+					graphics.beginFill(0x004f94, 0.8);
+					graphics.lineStyle();
+					graphics.drawRect(0, 0, unscaledWidth, unscaledHeight);
+					graphics.endFill();
+					
+					this.setStyle("color",0xFFFFFF);
+				}
+				else
+				{
+					this.setStyle("color",0x000000);
+					
+					if (itemIndex % 2 == 0)
+					{
+						graphics.beginFill(0x004f94, 0.1);
+						graphics.lineStyle();
+						graphics.drawRect(0, 0, unscaledWidth, unscaledHeight);
+						graphics.endFill();
+					}
+					else
+					{
+						graphics.beginFill(0xFFFFFF, 0);
+						graphics.lineStyle();
+						graphics.drawRect(0, 0, unscaledWidth, unscaledHeight);
+						graphics.endFill();
+					}
+				}
+				
+				// turn off opaqueBackground since this renderer has some transparency
+				opaqueBackground = null;
+				
+				
+			}
+			
+		]]>
+	</fx:Script>
+</s:IconItemRenderer>

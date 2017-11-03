@@ -1,0 +1,568 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:promo="components.promo.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogTheme;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.ActionSheetBuilder;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.builders.MultiSelectBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.TextOperationEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Utils.GPSUtil;
+			import classes.Utils.PartSync;
+			import classes.Utils.QueryConstructor;
+			
+			import events.MainNavEvent;
+			import events.PartSyncEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			import flatspark.enums.ButtonSizeEnum;
+			import flatspark.enums.TextInputSizeEnum;
+
+			
+			[Bindable] protected var acProducts:ArrayCollection = new ArrayCollection();
+			//protected var acProductTypes:ArrayCollection = new ArrayCollection();
+			//protected var acVendors:ArrayCollection = new ArrayCollection();
+			protected var filterIndex:int = 0;
+			[Bindable] private var showFilterLabel:Boolean = false;
+			[Bindable] private var checkedCount:int = 0;
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+				this.addEventListener(MainNavEvent.BACK_EVENT, mainNavigationBackListener,false,0,true);
+			}	
+			
+			
+			/* ===============================================			
+			PREPARE SUB VISIT DATA			
+			=================================================*/	
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{	
+				// update session var's
+				Globals.shouldTakePricePhoto = true;
+				Globals.PRO_PRICE = "";
+				Globals.PRO_COEFF = "Выберите";
+				
+				if (Globals.backFromPriceEntryForm) 
+				{
+					loadVendorData();
+				} 
+				else 
+				{
+					Globals.SUB_VIS_NUMBER = Globals.getUniqueCode();
+					Globals.loadingShow("Ввод цен","Получение координат начала операции");
+					GPSUtil.addEventListener("ERROR_GPS",gpsErrorHandler,false,0,true);
+					GPSUtil.addEventListener("HAS_GPS",gpsHandler,false,0,true);
+					GPSUtil.startLocationMonitoring();
+				}				
+			}
+			private function gpsHandler(e:Event):void
+			{
+				GPSUtil.removeEventListener("HAS_GPS",gpsHandler);
+				Globals.loadingClose();
+				
+				trace("PriceEntry gps success");
+				
+				makePrimaryInserts();
+			}
+			private function gpsErrorHandler(e:Event):void
+			{
+				Globals.loadingClose();
+				Globals.showOkDialog("GPS","Не удалось определить координаты. Повторите попытку");
+				GPSUtil.removeEventListener("ERROR_GPS",gpsHandler);
+				trace("PriceEntry gpsErrorHandler");
+			}
+			/* PRIMARY INSERTS */ 
+			private function makePrimaryInserts():void
+			{
+				Globals.loadingShow("Ввод цен","Подготовка операции");
+				
+				var adjArr:ArrayCollection = new ArrayCollection();	
+				
+				var insertArray:Array = QueryConstructor.buildSubVisitInsert("VIT05");
+				for (var i:int=0; i<insertArray.length; i++)
+				{
+					var bq:BatchQuery = new BatchQuery();
+					bq.query = insertArray[i];
+					adjArr.addItem(bq);
+				}
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, subVisitInsertResult );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, subVisitInsertResult, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function subVisitInsertResult(e:CheckEvent):void
+			{
+				Globals.loadingClose();
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, subVisitInsertResult );
+				if (e.data > 0) 
+				{
+					loadVendorData();
+				}	
+				else	
+				{
+					Globals.showOkDialog("ERROR START VISIT", e.text);
+				}
+			}
+			
+			/* ===============================================			
+			LOAD PRODUCTS LIST, VENDORS AND PROD TYPES			
+			=================================================*/	
+			private function loadVendorData():void
+			{
+				if (Globals.priceEntryWhereClause == "1=1") 
+				{
+					var query:String = "SELECT DISTINCT VEN_NAME FROM ST_PRODUCTS ORDER BY VEN_NAME";
+					Database.addEventListener(QueryEvent.DATA_LOADED, vendorDataLoaded, false, 0, true);
+					Database.init(query);
+				} 
+				else 
+				{
+					applyFilters();
+				}				
+			}
+			private function vendorDataLoaded(e:QueryEvent):void
+			{
+				Globals.acVendors = e.data;
+				Database.removeEventListener(QueryEvent.DATA_LOADED,vendorDataLoaded);
+				
+				var query:String = "SELECT DISTINCT PRT_NAME FROM ST_PRODUCTS ORDER BY PRT_NAME";
+				Database.addEventListener(QueryEvent.DATA_LOADED, productTypeDataLoaded, false, 0, true);
+				Database.init(query);
+			}
+			private function productTypeDataLoaded(e:QueryEvent):void
+			{
+				Globals.acProductTypes = e.data;
+				Database.removeEventListener(QueryEvent.DATA_LOADED,productTypeDataLoaded);		
+				
+				loadProducts(Globals.priceEntryWhereClause);
+			}
+			
+			private function loadProducts(whereClause:String):void
+			{
+				var query:String = QueryConstructor.buildSelectProductList(whereClause);
+				Database.addEventListener(QueryEvent.DATA_LOADED, dataLoaded, false, 0, true);
+				Database.init(query);
+			}
+			private function dataLoaded(e:QueryEvent):void
+			{
+				acProducts = e.data;
+				Database.removeEventListener(QueryEvent.DATA_LOADED,dataLoaded);
+				
+				updateCheckedProducts();
+			}
+			
+			private function updateCheckedProducts():void
+			{
+				checkedCount = 0;
+				for (var i:int=0; i<acProducts.length; i++) {
+					if (acProducts.getItemAt(i).PRO_ACTUAL_PRICE != null) {
+						checkedCount++;
+					}
+				}
+			}
+			
+			/* ===============================================			
+			NARROW SEARCH WITH TEXT FILTER			
+			=================================================*/	
+			protected function txtFilter_changeHandler(event:TextOperationEvent):void
+			{
+				acProducts.filterFunction = filterProducts;
+				acProducts.refresh();
+				
+				updateCheckedProducts();
+			}			
+			private function filterProducts(item:Object):Boolean 
+			{
+				var result:Boolean = false;				
+				var itemName:String = "";				
+				var searchString:String = txtFilter.text.toLowerCase();				
+				try { itemName = (item.PRO_NAME as String).toLowerCase(); } catch (err1:Error) { trace(err1.getStackTrace()); }				
+				if (itemName.indexOf(searchString) > -1) {
+					result = true;
+				}				
+				return result;
+			}
+			
+			/* ===============================================			
+			CLEAR ALL FILTERS			
+			=================================================*/	
+			protected function btnClearFilter_clickHandler(event:MouseEvent):void
+			{
+				clearFilters();
+				loadProducts(Globals.priceEntryWhereClause);
+			}
+			private function clearFilters():void
+			{
+				txtFilter.text = "";
+				for (var i:int=0; i<Globals.acVendors.length; i++) {
+					Globals.acVendors.getItemAt(i).SELECTED = 0;
+				}
+				for (var j:int=0; j<Globals.acProductTypes.length; j++) {
+					Globals.acProductTypes.getItemAt(j).SELECTED = 0;
+				}
+				lblFilters.text = "";
+				showFilterLabel = false;
+				
+				Globals.priceEntryWhereClause = "1=1";
+			}
+			
+			/* ===============================================			
+			OPEN FILTERS SET (VENDOR AND PROD TYPE)			
+			=================================================*/	
+			protected function btnSetFilter_clickHandler(event:MouseEvent):void
+			{
+				var actionSheet:DialogView = Dialog.service.create( 
+					new ActionSheetBuilder()
+					.setTheme( new DialogTheme( DialogTheme.MATERIAL_LIGHT ))
+					.setTitle( "Выберите фильтр" )
+					.setMessage( "Выберите вариант фильтрации по параметрам продукта" )
+					.addAction( "Вендор" )
+					.addAction( "Тип продукта" )
+					.addAction( "Закрыть", DialogAction.STYLE_CANCEL )					
+					.build()
+				);
+				
+				actionSheet.addEventListener( DialogViewEvent.CLOSED, actionSheet_closedHandler );
+				actionSheet.show();
+			}			
+			private function actionSheet_closedHandler( event:DialogViewEvent ):void
+			{
+				trace( "actionSheet closed " + event.index );
+
+				var actionSheet:DialogView = DialogView(event.currentTarget);
+				actionSheet.removeEventListener( DialogViewEvent.CLOSED, actionSheet_closedHandler );			
+				actionSheet.dispose();
+				
+				openMultiSelect(event.index);
+			}
+			
+			private function openMultiSelect(idx:int):void
+			{
+				filterIndex = idx;
+				switch(idx)
+				{
+					case 1:
+					{
+						prepareVendorList();
+						break;
+					}
+					case 2:
+					{
+						prepareProductTypeList();
+						break;
+					}	
+					default:
+					{
+						break;
+					}
+				}
+			}
+			
+			protected function prepareVendorList():void
+			{
+				var arrValues:Array = new Array();
+				var arrSelectedItems:Array = new Array();
+				for (var i:int=0; i<Globals.acVendors.length; i++) {
+					arrValues.push(Globals.acVendors.getItemAt(i).VEN_NAME);
+					arrSelectedItems.push(Globals.acVendors.getItemAt(i).SELECTED);
+				}
+				openMultiSelectDialog("Вендор", arrValues, arrSelectedItems);			
+			}
+			
+			protected function prepareProductTypeList():void
+			{
+				var arrValues:Array = new Array();
+				var arrSelectedItems:Array = new Array();
+				for (var j:int=0; j<Globals.acProductTypes.length; j++) {
+					arrValues.push(Globals.acProductTypes.getItemAt(j).PRT_NAME);
+					arrSelectedItems.push(Globals.acProductTypes.getItemAt(j).SELECTED);
+				}
+				openMultiSelectDialog("Тип продукта", arrValues, arrSelectedItems);			
+			}
+			
+			private function openMultiSelectDialog(title:String, arrValues:Array, arrSelectedItems:Array):void
+			{
+				var multiSelect: DialogView = Dialog.service.create(
+					new MultiSelectBuilder()
+					.setTitle(title)
+					.setAcceptLabel("OK")
+					.setCancelLabel("Отмена")
+					.setValues(arrValues,arrSelectedItems)
+					.build()
+				);
+				
+				multiSelect.addEventListener(DialogViewEvent.CLOSED, multiSelect_closedHandler);
+				multiSelect.addEventListener(DialogViewEvent.CANCELLED, multiSelect_closedHandler);
+				multiSelect.addEventListener(DialogViewEvent.CHANGED, multiSelect_changedHandler);
+				multiSelect.show();
+			}	
+			
+			private function multiSelect_changedHandler( event:DialogViewEvent ):void
+			{
+				trace( "filterIndex: " + filterIndex.toString());
+				trace( "multiSelect changed: " + event.indexes.join(",") );
+				var arrIndexes:Array = new Array();
+				for (var i:int=0; i<event.indexes.length; i++) {
+					arrIndexes.push(event.indexes[i]);
+				}
+				switch(filterIndex)
+				{
+					case 1:
+					{
+						setVendorSelection(arrIndexes);
+						break;
+					}
+					case 2:
+					{
+						setProductListSelection(arrIndexes);
+						break;
+					}	
+					default:
+					{
+						break;
+					}
+				}
+			}
+			protected function setVendorSelection(arr:Array):void
+			{
+				for (var i:int=0; i<arr.length; i++) {
+					Globals.acVendors.getItemAt(i).SELECTED = arr[i];
+				}
+			}
+			protected function setProductListSelection(arr:Array):void
+			{
+				for (var j:int=0; j<arr.length; j++) {
+					Globals.acProductTypes.getItemAt(j).SELECTED = arr[j];
+				}
+			}
+			
+			private function multiSelect_closedHandler( event:DialogViewEvent ):void
+			{
+				trace( "multiSelect closed: " + event.indexes.join(",") );	
+				var multiSelect:DialogView = DialogView(event.currentTarget);
+				multiSelect.removeEventListener( DialogViewEvent.CLOSED, multiSelect_closedHandler );			
+				multiSelect.dispose();
+				
+				applyFilters();
+			}
+			
+			private function applyFilters():void
+			{
+				var filterTextArray:Array = new Array();
+				var arrVendors:Array = new Array();
+				var arrProductTypes:Array = new Array();
+				var whereClause:String = "";
+				var wcVendor:String = "";
+				var wcProductType:String = "";
+				
+				for (var i:int=0; i<Globals.acVendors.length; i++) {
+					if (Globals.acVendors.getItemAt(i).SELECTED	== 1) {
+						arrVendors.push("'" + Globals.acVendors.getItemAt(i).VEN_NAME + "'");
+					}
+				}
+				
+				for (var j:int=0; j<Globals.acProductTypes.length; j++) {
+					if (Globals.acProductTypes.getItemAt(j).SELECTED == 1) {
+						arrProductTypes.push("'" + Globals.acProductTypes.getItemAt(j).PRT_NAME + "'");
+					}
+				}
+				
+				if ((arrVendors.length == 0) && (arrProductTypes.length == 0)) {
+					showFilterLabel = false;
+				} else {
+					showFilterLabel = true;
+					
+					if (arrVendors.length > 0) {
+						filterTextArray.push("Вендор: " + arrVendors.join(","));
+						wcVendor += "(VEN_NAME IN (" + arrVendors.join(",") + "))";
+					}
+					
+					if (arrProductTypes.length > 0) {
+						filterTextArray.push("Тип продукта: " + arrProductTypes.join(","));
+						wcProductType += "(PRT_NAME IN (" + arrProductTypes.join(",") + "))";
+					}
+				}
+				
+				var weightVendor:int = wcVendor.length > 0 ? 1 : 0;
+				var weightProductType:int = wcProductType.length > 0 ? 2 : 0;
+				
+				switch(weightVendor + weightProductType)
+				{
+					case 0:
+					{
+						whereClause = "1=1";
+						break;
+					}
+					case 1:
+					{
+						whereClause = wcVendor;
+						break;
+					}
+					case 2:
+					{
+						whereClause = wcProductType;
+						break;
+					}
+					case 3:
+					{
+						whereClause = wcProductType + " AND " + wcVendor;
+						break;
+					}	
+					default:
+					{
+						break;
+					}
+				}
+				
+				lblFilters.text = filterTextArray.join("\n").replace(/'/g,"");
+				Globals.priceEntryWhereClause = whereClause;
+				loadProducts(whereClause);
+			}
+			
+			
+			/* ===============================================			
+			HANDLE CLICK ON PRODUCTS LIST ITEM - OPEN FORM			
+			=================================================*/	
+			protected function lstProducts_clickHandler(event:MouseEvent):void
+			{
+				if (lstProducts.selectedIndex > -1) {
+					var selIdx:int = lstProducts.selectedIndex;	
+					Globals.PRO_CODE = acProducts.getItemAt(selIdx).PRO_CODE;
+					Globals.PRO_NAME = acProducts.getItemAt(selIdx).PRO_NAME;
+					trace("PriceEntryMain Click: " + Globals.PRO_NAME);
+					dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"906"));
+				}
+			}
+			
+			/* ===============================================			
+			EXIT CONFIRMATION, UPDATE VISIT AND PART SYNC			
+			=================================================*/	
+			private function mainNavigationBackListener(event:MainNavEvent):void
+			{
+				trace("*** PRICE ENTRY BACK LISTENER");
+				event.stopImmediatePropagation();
+				event.stopPropagation();
+				event.preventDefault();
+				
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setTitle( "Завершение операции" )
+					.setMessage( "Нажмите ОК для завершения ввода цен" )
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+				alert.addEventListener( DialogViewEvent.CLOSED, exitPriceEntry_closedHandler );
+				alert.show();
+			}
+			private function exitPriceEntry_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) 
+				{ 
+					var adjArr:ArrayCollection = new ArrayCollection();					
+					var bq:BatchQuery = new BatchQuery();
+					bq.query = "UPDATE ST_VISIT SET " +
+						"VIS_CANCELLED = 0," +					
+						" VIS_FINISH_DATE = '" + 
+						Globals.CurrentDateTimeWithMinutesSecondsString() + 
+						"' WHERE VIS_NUMBER = " +
+						"'" + Globals.SUB_VIS_NUMBER + "'" + ";";
+					adjArr.addItem(bq);
+					Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_END);
+					Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_END, false, 0, true);
+					Database.ADJUST(adjArr);
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, exitPriceEntry_closedHandler );
+				alert.dispose();
+			}
+			private function SAVE_VISIT_RESULT_END(e:CheckEvent):void
+			{	
+				Globals.loadingClose();
+				if (e.data > 0) 
+				{
+					START_PART_SYNC();
+				}	
+				else	
+				{
+					Globals.showOkDialog("ERROR VISIT END",e.text);
+				}
+			}
+			/* ===============================================			
+			PART SYNC
+			=================================================*/	
+			private function START_PART_SYNC():void
+			{
+				PartSync.addEventListener(PartSyncEvent.SYNC_RESULT, partSyncHandler);
+				PartSync.startPartSync();
+			}			
+			private function partSyncHandler(event:PartSyncEvent):void
+			{
+				trace("Part Sync Handler HAS ERROR: " + event.hasError + " | ERR_TEXT: " + event.errorText);
+				Globals.loadingClose();
+				PartSync.removeEventListener(PartSyncEvent.SYNC_RESULT, partSyncHandler);
+				clearFilters();
+				this.removeEventListener(MainNavEvent.BACK_EVENT, mainNavigationBackListener);
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,true));
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="Ввод цен" backVisible="true" />
+	
+	<s:VGroup width="100%" height="100%" padding="5">	
+		
+		<s:HGroup width="100%" padding="0" gap="0">
+			<components:ButtonIcon id="btnSetFilter" 
+								   label="Фильтры" width="50%" 
+								   brand="{BrandColorEnum.Primary}" height="{ButtonSizeEnum.Large}" click="btnSetFilter_clickHandler(event)" />
+			<s:Spacer width="5" />
+			<components:ButtonIcon id="btnClearFilter" 
+								   label="Очистить" width="50%" 
+								   brand="{BrandColorEnum.Warning}" height="{ButtonSizeEnum.Large}" click="btnClearFilter_clickHandler(event)" />
+		</s:HGroup>
+
+		<s:Label id="lblFilters" 
+				 width="100%" paddingBottom="5" paddingTop="5" visible="{showFilterLabel}" includeInLayout="{showFilterLabel}" />
+		
+		<s:HGroup width="100%" padding="0" gap="0">
+			<s:TextInput id="txtFilter" 
+						 width="100%"
+						 autoCapitalize="all"
+						 height="{TextInputSizeEnum.Large}" 
+						 prompt="Фильтр по коду продукта..." change="txtFilter_changeHandler(event)" />
+		</s:HGroup>	
+		
+		<s:Panel title="Список продукции ({checkedCount.toString()}/{acProducts.length.toString()})" width="100%" height="100%">
+			<s:List id="lstProducts" width="100%" height="100%"
+					dataProvider="{acProducts}"
+					labelField="PRO_NAME"
+					itemRenderer="renderers.CustomProductRenderer"
+					click="lstProducts_clickHandler(event)">
+			</s:List>
+		</s:Panel>
+	</s:VGroup>	
+</s:VGroup>

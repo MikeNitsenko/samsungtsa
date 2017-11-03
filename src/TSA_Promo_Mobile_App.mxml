@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   splashScreenImage="@Embed('assets/images/splash/LOGO.png')"
+			   splashScreenScaleMode="zoom"	
+			   splashScreenMinimumDisplayTime="2000"
+			   backgroundColor="0xDEDEDE"
+			   applicationDPI="160"		
+			   preinitialize="application1_preinitializeHandler(event)"
+			   creationComplete="application1_creationCompleteHandler(event)"
+			   activate="application1_activateHandler(event)"
+			   deactivate="application1_deactivateHandler(event)">
+	<fx:Style source="tsa.css" />
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.core.Core;
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			import com.distriqt.extension.flurry.Flurry;
+			
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.Database;
+			import classes.Utils.GPSUtil;
+			import classes.Utils.TextFile;
+			
+			import events.MainNavEvent;
+			import events.Model.QueryEvent;
+			
+			import screens.main.MainMenu;
+			import screens.main.Settings;
+			import screens.main.StartJob;
+			import screens.main.Sync;
+			import screens.messages.Messenger;
+			import screens.salepoint.SalepointInfo;
+			import screens.startjob.SearchAllSalepoints;
+			import screens.startjob.SearchFromRoute;
+			import screens.survey.FlatSurveyProcessing;
+			import screens.survey.OneToOneSurveyProcessing;
+			import screens.survey.SelectSurvey;
+			import screens.tasks.PriceEntryForm;
+			import screens.tasks.PriceEntryMain;
+			import screens.tasks.PriceEntryMakePhoto;
+			import screens.visit.VisitOperations;
+			import screens.visit.VisitStartMakePhoto;
+			
+			
+			
+			
+
+			
+			protected function application1_preinitializeHandler(event:FlexEvent):void
+			{
+				Core.init(Globals.APP_KEY);
+
+				// initialize ALL ane
+				Globals.initializeANEs(this.stage);
+				
+				// read system properties
+				Globals.readSystemProperties();
+				
+				//handle the button press here - disable BACK button 
+				//NativeApplication.nativeApplication.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown, false, 0, true);
+				NativeApplication.nativeApplication.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+
+				// initialize database
+				Database.openDB();
+				
+				// init GPS
+				GPSUtil.startLocationMonitoring();
+				
+				TextFile.log("0","Application Loaded","Extensions Initialized"); // move to ANE init in Globals and check for errors
+			}
+
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{					
+				// query for user settings
+				Database.addEventListener(QueryEvent.DATA_LOADED, settingsLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_SETTINGS");
+			}			
+			private function settingsLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED,settingsLoaded);
+				try
+				{
+					Globals.USE_CODE = e.data.getItemAt(0).SET_USE_CODE;
+					Globals.USE_NAME = (e.data.getItemAt(0).SET_USE_NAME == null ? "(не синхронизирован)" : e.data.getItemAt(0).SET_USE_NAME);
+					Globals.GPS_TRACK_INTERVAL = (e.data.getItemAt(0).SET_GPS_TRACK_INTERVAL as Number)*60*1000;
+					Globals.SYNC_TIME_INTERVAL = (e.data.getItemAt(0).SET_SYNC_TIME_INTERVAL as Number)*60*1000;
+					Globals.TRY_COUNT = Number(e.data.getItemAt(0).SET_TRY_COUNT);
+					Globals.USE_SYNC_TIME_START_HOURS = e.data.getItemAt(0).USE_SYNC_TIME_START_HOURS;
+					Globals.USE_SYNC_TIME_START_MINUTES = e.data.getItemAt(0).USE_SYNC_TIME_START_MINUTES;					
+					Globals.LANG = e.data.getItemAt(0).SET_LANG;					
+				}
+				catch (err:Error)
+				{
+					Globals.showOkDialog("Error restoring settings",err.message);
+				}
+				
+				// listen for Main Navigation Events
+				this.addEventListener(MainNavEvent.NEXT_EVENT, mainNavigationNextListener,false,0,true);
+				this.addEventListener(MainNavEvent.BACK_EVENT, mainNavigationBackListener,false,0,true);
+				
+				Flurry.service.analytics.logEvent( "Startup" );
+				// add Main Menu screen first
+				loadScreen("0");
+			}
+			
+			private function mainNavigationNextListener(event:MainNavEvent):void
+			{				
+				loadScreen(event.actionId);
+			}
+			private function loadScreen(screenId:String):void {
+				
+				Flurry.service.analytics.logEvent( "Load Screen: " + screenId);
+				// remove all from stage for all actions except EXIT
+				if (screenId != "4") { 
+					clearStage(); 
+					Globals.mainNavArray.push(screenId);
+				} 
+				// load appropriate screen
+				switch (screenId) 
+				{
+					case "0"	: addScreen(screens.main.MainMenu); // LOAD MAIN MENU
+						break;						
+					case "1"	: addScreen(screens.main.Sync); // OPEN SYNC
+						break;	
+					case "2"	: addScreen(screens.main.StartJob); // OPEN START JOB
+						break;
+					case "3"	: addScreen(screens.main.Settings); // OPEN SETTINGS
+						break;
+					case "40"	: addScreen(screens.startjob.SearchFromRoute); // OPEN SEARCH SALEPOINTS FROM ROUTE
+						break;
+					case "41"	: addScreen(screens.startjob.SearchAllSalepoints); // OPEN SEARCH ALL SALEPOINTS
+						break;
+					case "42"	: addScreen(screens.survey.SelectSurvey); // OPEN openSelectSurvey
+						break;
+					case "43"	: addScreen(screens.tasks.PriceEntryMain); // OPEN openTasks
+						break;
+					case "901"	: addScreen(screens.salepoint.SalepointInfo); // OPEN SALEPOINT INFO TO VIEW AND START VISIT
+						break;
+					case "902"	: addScreen(screens.visit.VisitStartMakePhoto); // OPEN VisitStart & MakePhoto
+						break;
+					case "903"	: addScreen(screens.visit.VisitOperations); // OPEN openVisitOperations
+						break;
+					case "904"	: addScreen(screens.survey.FlatSurveyProcessing); // OPEN openFlatSurveyProcessing
+						break;
+					case "905"	: addScreen(screens.survey.OneToOneSurveyProcessing); // OPEN OneToOneSurveyProcessing
+						break;
+					case "906"	: addScreen(screens.tasks.PriceEntryForm); // OPEN PriceEntryForm
+						break;
+					case "907"	: addScreen(screens.tasks.PriceEntryMakePhoto); // OPEN PriceEntryMakePhoto
+						break;
+					case "999"	: addScreen(screens.messages.Messenger); // OPEN MESSAGES
+						break;
+					case "4"	: exitApp(); // EXIT APP
+						break;
+					default		: Dialog.service.toast("No action assigned. Action ID: " + screenId,Dialog.LENGTH_LONG); loadPreviousScreen();
+				}
+			}
+			
+			private function mainNavigationBackListener(event:MainNavEvent):void
+			{
+				loadPreviousScreen();
+			}
+			
+			private function loadPreviousScreen():void
+			{
+				trace("*** TOP LEVEL BACK LISTENER");
+				Globals.mainNavArray.pop();
+				loadScreen(Globals.mainNavArray.pop());
+			}
+			
+			/* ===============================================			
+						ADD SCREEN HANDLER			
+			=================================================*/	
+			private function addScreen(screen:Class):void
+			{
+				var c:ClassFactory = new ClassFactory(screen);
+				this.addElement(c.newInstance());
+			}
+
+			/* ===============================================			
+							CLEAR STAGE			
+			=================================================*/				
+			private function clearStage():void {
+				this.removeAllElements();
+				//trace("MEM USAGE BEFORE GC: " + System.totalMemory / 1024);
+				System.gc();
+				trace("MEM USAGE AFTER GC: " + System.totalMemory / 1024);
+			}
+			
+			/* ===============================================			
+							EXIT APP			
+			=================================================*/				
+			private function exitApp():void {
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setTitle( "Выход" )
+					.setMessage( "Вы хотите выйти из приложения?" )
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+				alert.addEventListener( DialogViewEvent.CLOSED, exitAlert_closedHandler );
+				alert.show();
+			}			
+			private function exitAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) { NativeApplication.nativeApplication.exit(); }
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, exitAlert_closedHandler );
+				alert.dispose();
+			}
+
+			/* ===============================================			
+						BACK KEY PRESSED BLOCKER			
+			=================================================*/				
+			protected function onKeyDown(event:KeyboardEvent):void
+			{
+				if( event.keyCode == Keyboard.BACK )
+				{
+					event.preventDefault();
+					event.stopPropagation();
+					event.stopImmediatePropagation();	
+					stage.focus = stage;
+				}
+			}
+			
+			
+			/* ===============================================			
+			ACTIVATE HANDLER			
+			=================================================*/	
+			protected function application1_activateHandler(event:Event):void
+			{
+				trace("MAIN: App Activated");
+				if (Flurry.isSupported)
+				{
+					Flurry.service.analytics.startSession();
+				}
+			}
+			
+			/* ===============================================			
+			DEACTIVATE HANDLER			
+			=================================================*/	
+			protected function application1_deactivateHandler(event:Event):void
+			{
+				trace("MAIN: App Deactivated");
+				if (Flurry.isSupported)
+				{
+					Flurry.service.analytics.endSession();
+				}
+			}
+			
+		]]>
+	</fx:Script>
+		
+</s:Application>

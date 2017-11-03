@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009"
+		 xmlns:s="library://ns.adobe.com/flex/spark"
+		 xmlns:Promo="components.promo.*"
+		 xmlns:components="flatspark.components.*"
+		 width="100%" height="100%" preinitialize="group1_preinitializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.DateTimeDialogView;
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogType;
+			import com.distriqt.extension.dialog.builders.DateTimeDialogBuilder;
+			import com.distriqt.extension.dialog.events.DialogDateTimeEvent;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.PopUpEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			
+			private var isMale:Boolean = true;
+			private var dateIsSet:Boolean = false;
+			
+			[Embed(source='assets/images/MALE.png')]
+			[Bindable] public var MALE:Class;
+			
+			[Embed(source='assets/images/FEMALE.png')]
+			[Bindable] public var FEMALE:Class;
+			
+			[Embed(source='assets/images/MALE_CHECKED.png')]
+			[Bindable] public var MALE_CHECKED:Class;
+			
+			[Embed(source='assets/images/FEMALE_CHECKED.png')]
+			[Bindable] public var FEMALE_CHECKED:Class;
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH +  "/" + imgName).url;
+				btnMale.setStyle("icon",MALE_CHECKED);
+				btnFemale.setStyle("icon",FEMALE);
+				
+				dateIsSet = false;
+				
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+				
+				Database.addEventListener(QueryEvent.DATA_LOADED, dataLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_RESPONDENTS WHERE RES_VIS_NUMBER  = '" + VIS_NUMBER + "'");
+			}
+			private function dataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, dataLoaded );				
+				try
+				{
+					var s:String = e.data.getItemAt(0).RES_BIRTHDATE;
+					if (s != null)
+					{
+						btnDateOfBirth.label = s;
+						dateIsSet = true;
+					}
+					else
+					{
+						setLang();
+					}
+				}
+				catch (err:Error) {}
+			}
+			
+			protected function backHandler(event:NavBarEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{				
+				if (dateIsSet)
+				{
+					CREATE_RESPONDENT();
+				}
+				else
+				{
+					Globals.showOkDialog("Заполните поля", "Укажите возраст респондента");
+				}
+			}
+			
+			private function CREATE_RESPONDENT():void
+			{
+				
+				var RES_BIRTHDATE:String = (btnDateOfBirth.label != "...") ? btnDateOfBirth.label : "";
+				var RES_MALE:String = isMale ? "1" : "0";
+				
+				var adjArr:ArrayCollection = new ArrayCollection();	
+				var bq:BatchQuery = new BatchQuery();
+				bq.query = "UPDATE ST_RESPONDENTS SET " +					
+					"RES_BIRTHDATE = '" + RES_BIRTHDATE + "'," + 
+					"RES_LANG = '" + Globals.SURVEY_LANG + "'," + 
+					"RES_CODE_SENT_VIA_SIM = '" + Globals.RES_CODE_SENT_VIA_SIM + "'," + 
+					"RES_MALE = '" + RES_MALE + "' " +
+					"WHERE " + 
+					"RES_SUR_CODE = " + Globals.SUR_CODE + " AND " + 
+					"RES_VIS_NUMBER = '" + VIS_NUMBER + "'";
+				adjArr.addItem(bq);
+				
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			
+			private function SAVE_REG_RESULT_START(e:CheckEvent):void
+			{				
+				if (e.data > 0) 
+				{
+					Dialog.service.toast("Данные респондента сохранены");
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}	
+				else	
+				{
+					Dialog.service.toast(e.text);
+				}
+			}
+			
+			protected function btnDateOfBirth_clickHandler(event:MouseEvent):void
+			{
+				/*
+				var surveyPopup:PromoSurveyDateInput = new PromoSurveyDateInput();
+				surveyPopup.ANS_TEXT = "Дата рождения";
+				surveyPopup.addEventListener('close', setDateOfBirthResult, false, 0, true);
+				surveyPopup.open(this, true);
+				PopUpManager.centerPopUp(surveyPopup);
+				*/
+				var dateTime:DateTimeDialogView = Dialog.service.create( 
+					new DateTimeDialogBuilder()
+					.setMode( DialogType.MODE_DATE )
+					.setTitle( "Дата рождения" )
+					.setAcceptLabel( "OK" )
+					.setCancelLabel( "Отмена" )
+					.build()
+				);
+				dateTime.addEventListener( DialogViewEvent.CLOSED, dateTime_closedHandler );
+				dateTime.addEventListener( DialogDateTimeEvent.SELECTED, dateTime_selectedHandler );
+				
+				dateTime.show();
+			}
+			
+			private function dateTime_selectedHandler( event:DialogDateTimeEvent ):void
+			{
+				trace( event.type +"::"+ event.date.toString() );
+				btnDateOfBirth.label = Globals.dateToDDMMYYYYPoint(event.date);
+				dateIsSet = true;
+			}
+			
+			private function dateTime_closedHandler( event:DialogViewEvent ):void
+			{
+				var dateTime:DateTimeDialogView = DateTimeDialogView(event.currentTarget);
+				dateTime.removeEventListener( DialogViewEvent.CLOSED, dateTime_closedHandler );
+				dateTime.removeEventListener( DialogDateTimeEvent.SELECTED, dateTime_selectedHandler );
+				dateTime.dispose();
+			}
+			
+			private function setDateOfBirthResult(e:PopUpEvent):void
+			{
+				if (e.commit)
+				{
+					btnDateOfBirth.label = String(e.data);
+					dateIsSet = true;
+				}
+			}
+			
+			protected function btnMale_clickHandler(event:MouseEvent):void
+			{
+				btnMale.setStyle("icon",MALE_CHECKED);
+				btnFemale.setStyle("icon",FEMALE);
+				isMale = true;
+			}
+			
+			protected function btnFemale_clickHandler(event:MouseEvent):void
+			{
+				btnMale.setStyle("icon",MALE);
+				btnFemale.setStyle("icon",FEMALE_CHECKED);
+				isMale = false;
+			}
+			
+			protected function setLang():void
+			{
+				switch (Globals.SURVEY_LANG)
+				{
+					case "RUS" : setRussian();
+						break;
+					case "KAZ" : setKazakh();
+						break;
+					default    : setRussian();
+				}
+			}
+			
+			private function setRussian():void
+			{
+				this.btnDateOfBirth.label = "Дата рождения";
+				
+			}
+			
+			private function setKazakh():void
+			{
+				this.btnDateOfBirth.label = "Туған күні";
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:BitmapImage id="img" width="100%" height="100%" scaleMode="stretch" smooth="true"
+				   smoothingQuality="high"/>
+	<s:VGroup width="100%" height="90%" gap="0">
+		<Promo:NavBar id="navBar" headerObject="{arrQuestions.getItemAt(0) as Object}"/>	
+		<s:HGroup width="100%" height="100%">
+			<s:VGroup width="50%" height="100%" horizontalAlign="center" verticalAlign="middle">
+				<components:ButtonIcon id="btnDateOfBirth" width="70%" height="120"
+									   brand="{BrandColorEnum.Info}"
+									   click="btnDateOfBirth_clickHandler(event)"/>
+			</s:VGroup>
+			<s:VGroup width="50%" height="100%" horizontalAlign="center" verticalAlign="middle">
+				<s:HGroup width="70%">
+					<s:Button id="btnMale" width="50%" height="120"
+							  chromeColor="{Globals.BUTTON_CHROME_COLOR}"
+							  click="btnMale_clickHandler(event)" color="{Globals.BUTTON_COLOR}"/>
+					<s:Button id="btnFemale" width="50%" height="120"
+							  chromeColor="{Globals.BUTTON_CHROME_COLOR}"
+							  click="btnFemale_clickHandler(event)" color="{Globals.BUTTON_COLOR}"/>
+				</s:HGroup> 
+			</s:VGroup>
+		</s:HGroup>
+	</s:VGroup>	
+	
+</s:Group>

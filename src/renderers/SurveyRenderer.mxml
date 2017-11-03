@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:IconItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+					xmlns:s="library://ns.adobe.com/flex/spark"
+					preinitialize="iconitemrenderer1_preinitializeHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.application.Application;
+			
+			import mx.events.FlexEvent;
+			
+			protected function iconitemrenderer1_preinitializeHandler(event:FlexEvent):void
+			{
+				this.minHeight = Math.ceil(Application.service.device.displayMetrics.screenHeight*0.05);
+				this.iconFunction = getIcon;
+				this.labelField = "SUR_NAME";
+				this.messageFunction = msgFunction;
+			}
+			
+			private function msgFunction(item:Object):String
+			{
+				var s:String = item.SUR_DESC;
+				if ((s == "null") || (s == null)) {	s = "";	}
+				return s;
+			}
+			
+			private function getIcon(item:Object):String
+			{
+				var s:String = "assets/images/system/plain.png";
+				
+			
+				if (item.SUR_IS_PROMO == 1)
+				{
+					s = "assets/images/system/121.png";
+				}
+				
+				return s;
+			}
+			
+			override protected function drawBackground(unscaledWidth:Number, unscaledHeight:Number):void
+			{
+				if (this.data.VISITED == 1)
+				{
+					super.alpha = 0.7;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					opaqueBackground = "0xBED600";
+				}
+				else
+				{
+					super.alpha = 1;
+					super.drawBackground(unscaledWidth, unscaledHeight);
+					opaqueBackground = null;
+				}
+			}
+			
+			
+			
+		]]>
+	</fx:Script>
+</s:IconItemRenderer>

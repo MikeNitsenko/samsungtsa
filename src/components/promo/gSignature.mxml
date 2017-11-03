@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)"
+		 creationComplete="group1_creationCompleteHandler(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.adobe.images.PNGEncoder;
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.UIComponent;
+			import mx.events.FlexEvent;
+			
+			import spark.components.Button;
+			import spark.components.HGroup;
+			import spark.components.Label;
+			import spark.components.VGroup;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			
+			import events.PromoSurveyEvent;
+			import events.custom.CheckEvent;
+
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			public var TEXT:String = "";
+			[Bindable] public var QUE_COLOR:uint = 0xFFFFFF;
+			
+			private var curveDraw:CurveDraw;
+			private var btnErase:Button = new Button();
+			private var btnBack:Button = new Button();
+			private var btnNext:Button = new Button();
+			private var btnSave:Button = new Button();
+			private var container:UIComponent = new UIComponent();
+			private var navBar:NavBar = new NavBar();
+			
+			private var fName:String = "";
+			private var fURL:String = "";
+			private var f:File = new File();
+			
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				var cr:CusRect = new CusRect();
+				cr.rectColor = 0x001b33;
+				cr.percentWidth = 100;
+				cr.percentHeight = 100;
+				this.addElement(cr);
+				
+				container = new UIComponent();
+				this.addElement(container);
+				
+				curveDraw = new CurveDraw();	
+				curveDraw.percentWidth = 100;
+				curveDraw.percentHeight = 100;
+				container.addChild(curveDraw as Sprite);
+				
+				var vg:VGroup = new VGroup();
+				vg.percentHeight = 100;
+				vg.percentWidth = 100;
+				vg.horizontalAlign = "right";
+				vg.verticalAlign = "top";
+				vg.paddingRight = 10;
+				vg.paddingTop = 10;
+				vg.paddingBottom = 10;
+				vg.paddingLeft = 10;
+				this.addElement(vg);
+				
+				var hg:HGroup = new HGroup();
+				vg.addElement(hg);
+				
+				btnBack.label = "Назад";
+				btnBack.setStyle("fontSize",Globals.FONT_SIZE);
+				btnBack.setStyle("color", 0x004f94);
+				btnBack.setStyle("chromeColor", 0xFFFFFF);
+				btnBack.addEventListener(MouseEvent.CLICK, btnBack_clickHandler, false, 0, true);
+				hg.addElement(btnBack);
+				
+				btnNext.label = "Вперед";
+				btnNext.setStyle("fontSize",Globals.FONT_SIZE);
+				btnNext.setStyle("color", 0x004f94);
+				btnNext.setStyle("chromeColor", 0xFFFFFF);
+				btnNext.addEventListener(MouseEvent.CLICK, btnNext_clickHandler, false, 0, true);
+				hg.addElement(btnNext);
+				
+				btnErase.label = "Очистить экран";
+				btnErase.setStyle("fontSize",Globals.FONT_SIZE);
+				btnErase.setStyle("color", 0x004f94);
+				btnErase.setStyle("chromeColor", 0xFFFFFF);
+				btnErase.addEventListener(MouseEvent.CLICK, btnErase_clickHandler, false, 0, true);
+				vg.addElement(btnErase);
+				
+				var vgDisclaimer:VGroup = new VGroup();
+				vgDisclaimer.percentHeight = 100;
+				vgDisclaimer.percentWidth = 100;
+				vgDisclaimer.horizontalAlign = "center";
+				vgDisclaimer.verticalAlign = "bottom";
+				vg.addElement(vgDisclaimer);
+				
+				/*
+				var txt:TextArea = new TextArea();
+				txt.percentHeight = 100;
+				txt.percentWidth = 100;
+				txt.text = arrQuestions.getItemAt(0)[Globals.ANS_TEXT_LANG];
+				vgDisclaimer.addElement(txt);
+				*/
+				
+							
+				var lblText:Label = new Label();
+				lblText.text = arrQuestions.getItemAt(0)[Globals.QUE_TEXT_LANG];
+								//"Подтверждаю, что являюсь совершеннолетним курильщиком и гражданином РК, " +
+							   //"и не против получать информацию от компании Бритиш Американ Тобакко КТ";
+				lblText.percentWidth = 100;
+				lblText.setStyle("textAlign", "center");
+				lblText.setStyle("fontWeight", "bold");
+				lblText.setStyle("fontSize",Globals.FONT_SIZE);
+				lblText.setStyle("color", 0xFFFFFF);
+				vgDisclaimer.addElement(lblText);
+				
+			}
+			
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				var x:Number = curveDraw.width;
+				
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setCancelable(false)
+					.setTitle( "" )
+					.setMessage( arrQuestions.getItemAt(0)[Globals.ANS_TEXT_LANG] )
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+				alert.addEventListener( DialogViewEvent.CLOSED, signatureAlert_closedHandler );
+				alert.show();
+			}
+			private function signatureAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) { 					
+					Dialog.service.toast("Опрос продолжен. Пожалуйста, распишитесь");
+				} else {
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.DELETE_EVENT,true,false));
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, signatureAlert_closedHandler );
+				alert.dispose();
+			}
+
+			
+			
+			protected function btnBack_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function btnNext_clickHandler(event:MouseEvent):void
+			{
+				SAVE_IMAGE();
+			}
+
+			protected function btnErase_clickHandler(event:MouseEvent):void
+			{
+				container.removeChild(curveDraw as Sprite);
+				curveDraw = new CurveDraw();				
+				container.addChild(curveDraw as Sprite);
+			}
+			
+			private function SAVE_IMAGE():void
+			{
+				var allowNext:Boolean = true;
+				//Globals.loadingShow("Сохранение подписи");
+				
+				try
+				{
+					var bitmapData:BitmapData = snapClip(curveDraw as DisplayObject);
+					
+					function snapClip( clip:DisplayObject ):BitmapData
+					{
+						var bounds:Rectangle = clip.getBounds( clip );
+						var bitmap:BitmapData = new BitmapData( int( bounds.width + 0.5 ), int( bounds.height + 0.5 ), true, 0 );
+						bitmap.draw( clip, new Matrix(1,0,0,1,-bounds.x,-bounds.y) );
+						return bitmap;
+					}
+					
+					var ba:ByteArray = PNGEncoder.encode(bitmapData);
+					
+					if (ba.length > 2516) 
+					{
+						allowNext = true;
+						
+						//var fileName:String = VIS_NUMBER.substr(VIS_NUMBER.search(" - "),VIS_NUMBER.length);
+						fName = Globals.getUniqueNameForPhoto() + ".png";
+						
+						var file:File = File.userDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + fName);
+						var fs:FileStream = new FileStream();
+						
+						fs.open(file,FileMode.WRITE);
+						fs.writeBytes(ba,0,ba.length);
+						fs.close();
+						
+						fURL = file.url;
+						
+						/*
+						var adjArr:ArrayCollection = new ArrayCollection();	
+						var bq:BatchQuery = new BatchQuery();
+						bq.query = "UPDATE ST_RESPONDENTS SET " +					
+						"RES_PHOTO = '" + fileName + "' " + 
+						"WHERE " + 
+						"RES_SUR_CODE = " + Globals.SUR_CODE + " AND " + 
+						"RES_VIS_NUMBER = '" + VIS_NUMBER + "'";
+						adjArr.addItem(bq);
+						
+						Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START );
+						Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START, false, 0, true);
+						Database.ADJUST(adjArr);		
+						*/
+						
+						var adjArr:ArrayCollection = new ArrayCollection();
+						
+						var bq:BatchQuery = new BatchQuery();
+						bq.query = "INSERT INTO ST_VISIT_PHOTO (VIP_VIS_NUMBER, VIP_SAL_ID, VIP_PHOTO_URL, " +
+							"VIP_PHOTO_NAME, VIP_FOLDER_NAME, VIP_PHOTO_DATE, VIP_ACTIVE, VIP_IS_SIGNATURE) " +
+							" " +
+							"VALUES (" +
+							"'" + Globals.SUB_VIS_NUMBER + "', " +
+							"'" + Globals.SAL_ID + "', " +
+							"'" + fURL + "', " + 
+							"'" + fName + "', " +
+							"'" + Globals.USE_CODE + "', " +
+							"'" + Globals.CurrentDateTimeWithMinutesSecondsString() + "', " +
+							"1,1)"; 
+						adjArr.addItem(bq);
+						
+						Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START );
+						Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_REG_RESULT_START, false, 0, true);
+						Database.ADJUST(adjArr);
+					} 
+					else 
+					{
+						Globals.loadingClose();
+						
+						allowNext = false;
+						
+						Globals.showOkDialog("Необходимо расписаться", "Пожалуйста распишитесь в специальной области для росписи");
+					}				
+					
+				}
+				catch (err:Error)
+				{
+					Globals.loadingClose();
+					
+					trace(err.getStackTrace());
+				}
+				
+				//if (allowNext) { dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false)); }
+			}
+
+			
+			private function SAVE_REG_RESULT_START(e:CheckEvent):void
+			{	
+				Globals.loadingClose();
+				
+				if (e.data > 0) 
+				{
+					Dialog.service.toast("Подпись сохранена");			
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}	
+				else	
+				{
+					Globals.showOkDialog("Ошибка записи в БД", e.text);
+				}
+			}
+
+			
+			
+			
+		]]>
+	</fx:Script>
+	
+	
+	
+</s:Group>

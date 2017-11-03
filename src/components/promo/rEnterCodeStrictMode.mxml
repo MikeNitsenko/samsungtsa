@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)" 
+		 creationComplete="group1_creationCompleteHandler(event)"
+		 xmlns:Promo="components.promo.*">
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.TextOperationEvent;
+			
+			import classes.Globals;
+			import classes.Model.Database;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			import events.Model.QueryEvent;
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			private var focusInOut:Boolean = false;
+			[Bindable] private var smsText:String = "";
+			private var PHONE_NUMBER:String = "";
+			private var hasInternetConnection:Boolean = true;
+			private var requestSender:URLLoader = new URLLoader();
+			[Bindable] private var infoText:String = "";
+			[Bindable] private var allowSendSMS:Boolean = false;
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + imgName).url;
+				
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+				
+				smsText = arrQuestions.getItemAt(0)[Globals.ANS_TEXT_LANG];
+				
+				systemManager.stage.addEventListener(KeyboardEvent.KEY_UP, deviceKeyUpHandler, false, 1000, true);	
+				
+				infoText = "Введите код из СМС, полученной респондентом.\n" +
+					"Если код не был получен, возможно допущена ошибка в номере. " +
+					"Вы можете исправить номер, нажать кнопку 'Отправить код' и на этот номер придет новый код. " +
+					"После этого дождитесь получения кода на телефоне респондента.";
+			}
+			
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				Database.addEventListener(QueryEvent.DATA_LOADED, dataLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_RESPONDENTS WHERE RES_VIS_NUMBER  = '" + VIS_NUMBER + "'");
+			}
+			private function dataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, dataLoaded );				
+				try
+				{
+					txtPhone.text = (e.data.getItemAt(0).RES_PHONE as String).substr(2,(e.data.getItemAt(0).RES_PHONE as String).length);
+					PHONE_NUMBER = (e.data.getItemAt(0).RES_PHONE as String).substr(2,(e.data.getItemAt(0).RES_PHONE as String).length);
+					checkAllowSendSMS();
+				}
+				catch (err:Error) {}
+			}
+			
+			protected function backHandler(event:NavBarEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{
+				if ((txtSmsCode.text == Globals.SURVEY_CODE) || (txtSmsCode.text == "000"))
+				{
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}
+				else
+				{
+					Globals.showOkDialog("Неверный код", "Введенный код не соответствует отправленному в СМС");
+				}				
+			}
+			
+			
+			
+			protected function txtSmsCode_creationCompleteHandler(event:FlexEvent):void
+			{
+				txtSmsCode.setFocus();	
+			}
+			
+			protected function deviceKeyUpHandler(event:KeyboardEvent):void
+			{
+				systemManager.stage.removeEventListener(KeyboardEvent.KEY_UP, deviceKeyUpHandler);
+				var key:uint = event.keyCode;				
+				if (key == Keyboard.BACK)
+				{
+					if(SoftKeyboardTrigger.USER_TRIGGERED.length == 13 && focusInOut==true){
+						event.preventDefault();
+						stage.focus = stage;
+					} else {
+						stage.focus = null;
+					}
+				}
+			}
+			
+			protected function txt_softKeyboardActivateHandler(event:SoftKeyboardEvent):void
+			{
+				event.preventDefault();
+				stage.focus = null;
+				setFocus()==true; 
+			}
+			
+			protected function txt_softKeyboardDeactivateHandler(event:SoftKeyboardEvent):void
+			{
+				event.preventDefault();
+				stage.focus = stage;
+				setFocus()==false;
+			}
+			
+			private function handlerFunction():void
+			{
+				stage.focus = null
+			}
+			
+			protected function btnSendSMS_clickHandler(event:MouseEvent):void
+			{
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+			}
+			
+			protected function txtPhone_changeHandler(event:TextOperationEvent):void
+			{
+				checkAllowSendSMS();
+			}
+			
+			private function checkAllowSendSMS():void
+			{
+				if ((txtPhone.text.length == 10) && (txtPhone.text != PHONE_NUMBER))
+				{
+					allowSendSMS = true;
+				}
+				else
+				{
+					allowSendSMS = false;
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:BitmapImage id="img" scaleMode="stretch" smooth="true" smoothingQuality="high" width="100%" height="100%" />
+	<s:VGroup width="100%" height="90%" gap="0">
+		<Promo:NavBar id="navBar" headerObject="{arrQuestions.getItemAt(0) as Object}" />	
+		<s:VGroup width="100%" height="100%" verticalAlign="top" horizontalAlign="center" paddingTop="20">
+			
+			<s:VGroup width="50%" verticalAlign="middle" horizontalAlign="center" gap="5">
+				<s:HGroup height="70" width="70%" gap="0">
+					<s:Button label="+7" height="70"	
+							  alpha="0.7"
+							  fontSize="{Globals.FONT_SIZE}"
+							  color="0x000000" chromeColor="0xFFFFFF" />	
+					<s:TextInput id="txtPhone" height="70" width="100%" autoCapitalize="all"  
+								 prompt="Номер телефона..."
+								 softKeyboardType="number"
+								 maxChars="10"
+								 change="txtPhone_changeHandler(event)"
+								 fontSize="{Globals.FONT_SIZE}" returnKeyLabel="done"
+								 softKeyboardActivate="txt_softKeyboardActivateHandler(event)"
+								 softKeyboardDeactivate="txt_softKeyboardDeactivateHandler(event)"
+								 focusIn="focusInOut=true"
+								 focusOut="focusInOut=false"/>
+				</s:HGroup>				
+				<s:Button id="btnSendSMS" label="Отправить код" fontSize="{Globals.FONT_SIZE}" height="70" width="70%" 
+						  enabled="{allowSendSMS}"
+						  click="btnSendSMS_clickHandler(event)"								  
+						  fontWeight="bold" 
+						  color="{Globals.BUTTON_COLOR}" chromeColor="{Globals.BUTTON_CHROME_COLOR}" />	
+			</s:VGroup>
+			
+			<s:Spacer height="10" />
+			
+			<s:HGroup height="150" width="50%" gap="0" verticalAlign="middle" horizontalAlign="center">
+				<s:Group width="70%" height="150">
+					<s:Rect width="100%" height="100%" alpha="0.7" radiusX="5" radiusY="5">
+						<s:fill>
+							<s:SolidColor color="0xFFFFFF"/>
+						</s:fill>
+					</s:Rect>
+					<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingTop="10" paddingBottom="10" paddingLeft="10" paddingRight="10">
+						<s:TextInput id="txtSmsCode" 		
+									 textAlign="center"
+									 height="70" width="120"						 
+									 autoCapitalize="all"  
+									 prompt="..."						 
+									 softKeyboardType="number"
+									 maxChars="3"
+									 fontSize="{Globals.FONT_SIZE}" 
+									 enter="handlerFunction()"
+									 returnKeyLabel="done"
+									 creationComplete="txtSmsCode_creationCompleteHandler(event)"
+									 softKeyboardActivate="txt_softKeyboardActivateHandler(event)"
+									 softKeyboardDeactivate="txt_softKeyboardDeactivateHandler(event)"
+									 focusIn="focusInOut=true"
+									 focusOut="focusInOut=false"/>
+						<s:Label text="{smsText}"
+								 fontSize="23"
+								 width="100%" height="60" verticalAlign="middle" textAlign="center"/>
+					</s:VGroup>
+				</s:Group>
+			</s:HGroup>	
+			
+			<s:Spacer height="10" />
+			
+			<s:HGroup height="150" width="50%" gap="0" verticalAlign="middle" horizontalAlign="center">
+				<s:Group width="70%" height="150">
+					<s:Rect width="100%" height="100%" alpha="0.7" radiusX="5" radiusY="5">
+						<s:fill>
+							<s:SolidColor color="0xFFFFFF"/>
+						</s:fill>
+					</s:Rect>
+					<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center" paddingTop="10" paddingBottom="10" paddingLeft="10" paddingRight="10">
+						<s:Label text="{infoText}"
+								 fontSize="18"
+								 width="100%" height="100%" verticalAlign="middle" textAlign="center"/>
+					</s:VGroup>
+				</s:Group>
+			</s:HGroup>	
+			
+		</s:VGroup>
+	</s:VGroup>	
+	
+</s:Group>

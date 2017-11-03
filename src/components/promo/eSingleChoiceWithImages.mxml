@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 width="100%" height="100%"
+		 preinitialize="group1_preinitializeHandler(event)" 
+		 xmlns:Promo="components.promo.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			
+			import events.NavBarEvent;
+			import events.PromoSurveyEvent;
+			
+			public var VIS_NUMBER:String = "";
+			public var imgName:String = "";
+			[Bindable] public var arrQuestions:ArrayCollection = new ArrayCollection();
+			
+			protected function group1_preinitializeHandler(event:FlexEvent):void
+			{
+				img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + imgName).url;
+				
+				this.addEventListener(NavBarEvent.BACK_EVENT,backHandler,false,0,true);
+				this.addEventListener(NavBarEvent.NEXT_EVENT,nextHandler,false,0,true);
+				
+				for (var i:int=0; i < arrQuestions.length; i++)
+				{
+					if (arrQuestions.getItemAt(i).SELECTED == "1")
+					{
+						loadImage(arrQuestions.getItemAt(i).ANS_PHOTO);
+						lstQuestions.selectedIndex = i;
+					} else {
+						loadImage(arrQuestions.getItemAt(0).ANS_PHOTO);
+					}
+				}
+				
+				if (Number(arrQuestions.getItemAt(0).QUE_WEIGHT) > 0) {
+					grpQuestions.percentHeight = Number(arrQuestions.getItemAt(0).QUE_WEIGHT);
+				}
+			}
+			
+			protected function backHandler(event:NavBarEvent):void
+			{
+				clearArray();
+				dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.BACK_EVENT,true,false));
+			}
+			
+			protected function nextHandler(event:NavBarEvent):void
+			{
+				if (lstQuestions.selectedIndex > -1)
+				{
+					dispatchEvent(new PromoSurveyEvent(PromoSurveyEvent.NEXT_EVENT,true,false));
+				}
+				else
+				{
+					Globals.showOkDialog("","Необходимо выбрать ответ");
+				}
+			}
+			
+			protected function lstQuestions_clickHandler(event:MouseEvent):void
+			{
+				clearArray();
+				
+				if (lstQuestions.selectedIndex > -1)
+				{
+					var selIdx:int = lstQuestions.selectedIndex;
+					var vPos:Number = lstQuestions.layout.verticalScrollPosition;
+					
+					loadImage(arrQuestions.getItemAt(lstQuestions.selectedIndex).ANS_PHOTO);
+					arrQuestions.getItemAt(lstQuestions.selectedIndex).SELECTED = "1";
+					arrQuestions.getItemAt(lstQuestions.selectedIndex).SRS_ANS_VALUE = "1";
+					
+					arrQuestions.refresh();
+					lstQuestions.selectedIndex = selIdx;
+					lstQuestions.layout.verticalScrollPosition = vPos;
+					lstQuestions.ensureIndexIsVisible(selIdx);
+				}				
+			}
+			
+			private function clearArray():void
+			{
+				for (var i:int=0; i < arrQuestions.length; i++)
+				{
+					arrQuestions.getItemAt(i).SELECTED = "0";
+					arrQuestions.getItemAt(i).SRS_ANS_VALUE = "null";
+				}
+			}
+			
+			private function loadImage(imageName:String):void
+			{
+				var loader:Loader = new Loader();
+				var fl:File = File.documentsDirectory.resolvePath("BAT_PROMO/" + imageName);
+				var bytes:ByteArray = new ByteArray();
+				var filestream:FileStream = new FileStream();			
+				var bitmap:Bitmap;
+				
+				try
+				{
+					filestream.open(fl, FileMode.READ);
+					filestream.readBytes(bytes, 0, filestream.bytesAvailable);
+					filestream.close();
+					loader = new Loader();
+					loader.contentLoaderInfo.addEventListener(Event.COMPLETE, showPic);
+					loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onError);
+					loader.loadBytes(bytes);
+				}
+				catch (e:Error)
+				{
+					Dialog.service.toast(e.getStackTrace());
+				}
+				
+				function showPic(event:Event):void
+				{
+					fadeInImage.play();
+					
+					loader.contentLoaderInfo.removeEventListener(Event.COMPLETE, showPic);
+					var bitmapData:BitmapData = new BitmapData(loader.content.width,loader.content.height, true, 0x000000);
+					bitmapData.draw(loader.content, new Matrix(),null,null,null,true);		
+					imgAnswer.source = new Bitmap(bitmapData);				
+				}
+				
+				function onError(err:IOErrorEvent):void
+				{
+					Dialog.service.toast("Нет фото");
+				}
+			}
+			
+			private function findSelectedAnswer():void
+			{
+				for (var i:int=0; i < arrQuestions.length; i++)
+				{
+					if (arrQuestions.getItemAt(i).SRS_ANS_VALUE == "1")
+					{
+						lstQuestions.selectedIndex = i;
+					}
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<s:Fade id="fadeInImage" alphaFrom="0" alphaTo="1" duration="1000" target="{this.imgAnswer}" />
+	</fx:Declarations>
+	<s:BitmapImage id="img" scaleMode="stretch" smooth="true" smoothingQuality="high" width="100%" height="100%" />
+	<s:VGroup width="100%" height="90%" gap="0">
+		<Promo:NavBar id="navBar" headerObject="{arrQuestions.getItemAt(0) as Object}" />	
+		<s:HGroup width="100%" height="100%">
+			<s:VGroup id="panImage" width="70%" height="100%" verticalAlign="middle" horizontalAlign="center" 
+					  paddingLeft="50" paddingRight="50">
+				<s:Group width="100%" height="90%">
+					<s:Rect width="100%" height="100%" alpha="0.0" radiusX="10" radiusY="10">
+						<s:fill>
+							<s:SolidColor color="0xFFFFFF"/>
+						</s:fill>
+					</s:Rect>
+					<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center">
+						<s:BitmapImage id="imgAnswer" height="90%" maxWidth="{Math.ceil(Capabilities.screenResolutionX*0.6)}"
+									   scaleMode="letterbox" smooth="true" smoothingQuality="high" />
+					</s:VGroup>
+				</s:Group>					
+			</s:VGroup>
+			<s:VGroup id="panQuestions" width="30%" height="100%" verticalAlign="bottom" paddingBottom="50" paddingTop="20" horizontalAlign="center">
+				<s:Group id="grpQuestions" width="100%" height="50%">
+					<s:Rect width="100%" height="100%" alpha="0.85" topLeftRadiusX="10" bottomLeftRadiusX="10">
+						<s:fill>
+							<s:SolidColor color="0xFFFFFF"/>
+						</s:fill>
+					</s:Rect>
+					<s:VGroup width="100%" height="100%" verticalAlign="middle" horizontalAlign="center">
+						<s:List id="lstQuestions" labelField="{Globals.ANS_TEXT_LANG}"
+								dataProvider="{arrQuestions}"
+								itemRenderer="renderers.QuestionRenderer"
+								click="lstQuestions_clickHandler(event)"
+								width="100%" height="100%" 
+								contentBackgroundAlpha="0.5"
+								alpha="0.5" />
+					</s:VGroup>
+				</s:Group>					
+			</s:VGroup>
+		</s:HGroup>
+	</s:VGroup>	
+</s:Group>

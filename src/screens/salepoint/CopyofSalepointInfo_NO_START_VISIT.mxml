@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Utils.GPSUtil;
+			import classes.Utils.QueryConstructor;
+			
+			import events.MainNavEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				GPSUtil.startLocationMonitoring();
+				
+				Database.addEventListener(QueryEvent.DATA_LOADED, arrSalepointsLoaded, false, 0, true);
+				Database.init("SELECT * FROM VIEW_ST_SALEPOINT WHERE SAL_CODE = " + Globals.SAL_CODE);
+			}
+			private function arrSalepointsLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, arrSalepointsLoaded );
+				lblSalNotes.text = e.data.getItemAt(0).SAL_NOTES;
+				lblSalAddress.text = e.data.getItemAt(0).SAL_HOUSE;
+			}
+			
+			protected function btnStartVisit_clickHandler(event:MouseEvent):void
+			{
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setTitle( "Начало визита" )
+					.setMessage( "Вы хотите начать работу в точке " + Globals.SAL_NAME + "?" )
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+				alert.addEventListener( DialogViewEvent.CLOSED, startVisitAlert_closedHandler );
+				alert.show();
+			}
+			private function startVisitAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) { 
+					// generate unique number for visit
+					Globals.VIS_NUMBER = Globals.getUniqueCode();
+					Globals.backFromPriceEntryForm = false; // set this to back, because it's new visit - we'll want to create new subVisit
+					//dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"902"));
+					Globals.loadingShow("","Получение координат");
+					GPSUtil.addEventListener("ERROR_GPS",gpsErrorHandler,false,0,true);
+					GPSUtil.addEventListener("HAS_GPS",gpsHandler,false,0,true);
+					GPSUtil.startLocationMonitoring();
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, startVisitAlert_closedHandler );
+				alert.dispose();
+			}
+			
+			private function gpsHandler(e:Event):void
+			{
+				GPSUtil.removeEventListener("HAS_GPS",gpsHandler);
+				Globals.loadingClose();
+				
+				trace("SalInfo gps success");
+				
+				makePrimaryInserts();
+			}
+			private function gpsErrorHandler(e:Event):void
+			{
+				Globals.loadingClose();
+				Globals.showOkDialog("GPS","Не удалось определить координаты. Повторите попытку");
+				GPSUtil.removeEventListener("ERROR_GPS",gpsHandler);
+				trace("SalInfo gpsErrorHandler");
+			}
+			
+			/* PRIMARY INSERTS */ 
+			private function makePrimaryInserts():void
+			{
+				Globals.loadingShow("","Подготовка данных визита");
+
+				var adjArr:ArrayCollection = new ArrayCollection();	
+				
+				var insertArray:Array = QueryConstructor.buildPrimaryInserts();
+				for (var i:int=0; i<insertArray.length; i++)
+				{
+					var bq:BatchQuery = new BatchQuery();
+					bq.query = insertArray[i];
+					adjArr.addItem(bq);
+				}
+
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_START );
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_START, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function SAVE_VISIT_RESULT_START(e:CheckEvent):void
+			{
+				Globals.loadingClose();
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_START );
+				if (e.data > 0) 
+				{
+					dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"902"));
+				}	
+				else	
+				{
+					Globals.showOkDialog("ERROR START VISIT", e.text);
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="{Globals.SAL_ID}" backVisible="true" />
+	
+	<s:VGroup width="100%" height="10%" padding="5">
+		<components:ButtonIcon id="btnStartVisit"
+							   label="НАЧАТЬ ВИЗИТ"
+							   width="100%"
+							   height="100%"
+							   brand="{BrandColorEnum.Primary}"
+							   click="btnStartVisit_clickHandler(event)" />
+	</s:VGroup>	
+	<s:Scroller width="100%" height="90%">
+		<s:VGroup width="100%" paddingLeft="5" paddingRight="5" paddingBottom="5">
+			<s:Panel title="Информация о торговой точке" width="100%">
+				<s:VGroup width="100%" height="100%" padding="5">
+					<s:Label text="Название точки:" fontWeight="bold" width="100%" />
+					<s:Label text="{Globals.SAL_NAME}" width="100%" />
+					<s:Line width="100%">
+						<s:stroke>
+							<s:SolidColorStroke color="#CCCCCC" weight="1" caps="square"/>
+						</s:stroke>
+					</s:Line>
+					<s:Label text="Адрес:" fontWeight="bold" width="100%" />
+					<s:Label id="lblSalAddress" width="100%" />
+					<s:Line width="100%">
+						<s:stroke>
+							<s:SolidColorStroke color="#CCCCCC" weight="1" caps="square"/>
+						</s:stroke>
+					</s:Line>
+					<s:Label text="Ориентир:" fontWeight="bold" width="100%" />
+					<s:Label id="lblSalNotes" width="100%" />
+				</s:VGroup>
+			</s:Panel>
+		</s:VGroup>
+	</s:Scroller>
+</s:VGroup>

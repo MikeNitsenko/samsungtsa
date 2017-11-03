@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Model.ExternalData;
+			import classes.Utils.GPSUtil;
+			import classes.Utils.PartSync;
+			import classes.Utils.QueryConstructor;
+			
+			import events.MainNavEvent;
+			import events.PartSyncEvent;
+			import events.Model.ExternalDataEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				var query:String = QueryConstructor.buildMenuLoad("VISIT");
+				Database.addEventListener(QueryEvent.DATA_LOADED, dataLoaded, false, 0, true);
+				Database.init(query);
+			}
+			private function dataLoaded(e:QueryEvent):void
+			{
+				this.lstMenu.dataProvider = e.data;
+				Database.removeEventListener(QueryEvent.DATA_LOADED,dataLoaded);
+			}
+			
+			protected function lstMenu_clickHandler(event:MouseEvent):void
+			{
+				if (lstMenu.selectedIndex > -1) {
+					var idx:String = lstMenu.selectedItem.MNU_ID;					
+					dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,idx));
+				}
+			}
+			
+			protected function btnEndVisit_clickHandler(event:MouseEvent):void
+			{
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setTitle( "Завершение визита" )
+					.setMessage( "Вы хотите завершить работу в точке " + Globals.SAL_NAME + "?" )
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+				alert.addEventListener( DialogViewEvent.CLOSED, endVisitAlert_closedHandler );
+				alert.show();
+			}
+			private function endVisitAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) 
+				{ 					
+					Globals.loadingShow("","Получение координат");
+					GPSUtil.addEventListener("ERROR_GPS",gpsErrorHandler,false,0,true);
+					GPSUtil.addEventListener("HAS_GPS",gpsHandler,false,0,true);
+					GPSUtil.startLocationMonitoring();
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, endVisitAlert_closedHandler );
+				alert.dispose();
+			}
+			
+			
+			private function gpsHandler(e:Event):void
+			{
+				GPSUtil.removeEventListener("HAS_GPS",gpsHandler);
+				Globals.loadingClose();
+				
+				trace("VisitEnd gps success");
+				
+				var adjArr:ArrayCollection = new ArrayCollection();					
+				var bq:BatchQuery = new BatchQuery();
+				/*
+				bq.query = "UPDATE ST_VISIT SET VIS_CANCELLED = 0," +
+					//" VIS_FAC_CODE = " + e.data.FAC_CODE.toString() + "," +	
+					//" VIS_COMMENT = '" + e.data.VIS_COMMENT.toString() + "'," +			
+					" VIS_ACCURACY = '" + GPSUtil.ACCURACY + "'," +
+					" VIS_GPS_TYPE = '" + GPSUtil.GPS_PROVIDER + "'," +
+					" VIS_LATITUDE = '" + GPSUtil.LAT + "'," +
+					" VIS_LONGITUDE = '" + GPSUtil.LON + "'," +						
+					" VIS_FINISH_DATE = '" + 
+					Globals.CurrentDateTimeWithMinutesSecondsString() + 
+					"' WHERE VIS_NUMBER = " +
+					"'" + Globals.VIS_NUMBER + "'" + ";";
+				*/
+				bq.query = QueryConstructor.buildCheckOutInsert("VIT06");
+				adjArr.addItem(bq);
+				
+				// Write log
+				//TextFile.append("VISIT_END;" + Globals.USE_CODE + ";" + Globals.PER_CODE + ";" + 
+				//	Globals.VIS_NUMBER + ";" + "SAL_ID: " + Globals.SAL_ID + ";" + Globals.CurrentDateTimeWithMinutesSecondsString() + ";" + Globals.VERSION_NUMBER + ";" + File.lineEnding);
+
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_END);
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, SAVE_VISIT_RESULT_END, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function gpsErrorHandler(e:Event):void
+			{
+				GPSUtil.removeEventListener("ERROR_GPS",gpsErrorHandler);
+				trace("VisitEnd gpsErrorHandler");
+				Globals.showOkDialog("ERROR VISIT END","GPS ERROR");
+			}
+
+			private function SAVE_VISIT_RESULT_END(e:CheckEvent):void
+			{	
+				Globals.loadingClose();
+				if (e.data > 0) 
+				{
+					//Globals.mainNavArray.pop(); // remove screen with photo from crumb
+					//dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false,""));
+					START_PART_SYNC();
+				}	
+				else	
+				{
+					Globals.showOkDialog("ERROR VISIT END",e.text);
+				}
+			}
+			
+			/* ===============================================			
+			PART SYNC
+			=================================================*/	
+			private function START_PART_SYNC():void
+			{
+				PartSync.addEventListener(PartSyncEvent.SYNC_RESULT, partSyncHandler);
+				PartSync.startPartSync();
+			}			
+			private function partSyncHandler(event:PartSyncEvent):void
+			{
+				trace("Part Sync Handler HAS ERROR: " + event.hasError + " | ERR_TEXT: " + event.errorText);
+				Globals.loadingClose();
+				PartSync.removeEventListener(PartSyncEvent.SYNC_RESULT, partSyncHandler);
+				Globals.mainNavArray.pop(); // remove screen from crumb
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false,""));	
+			}
+
+			
+		]]>
+	</fx:Script>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="{Globals.SAL_ID}" backVisible="false" />
+	
+	<s:VGroup width="100%" height="10%" paddingTop="5" paddingLeft="5" paddingRight="5">
+		<components:ButtonIcon id="btnEndVisit"
+							   label="ЗАВЕРШИТЬ ВИЗИТ"
+							   width="100%"
+							   height="100%"
+							   brand="{BrandColorEnum.Success}"
+							   click="btnEndVisit_clickHandler(event)" />
+	</s:VGroup>	
+	
+	<s:VGroup width="100%" height="90%" padding="5">
+		<s:Panel title="Действия в точке" width="100%" height="100%">
+			<s:List id="lstMenu" width="100%" height="100%"
+					labelField="ITEM_NAME" 
+					itemRenderer="renderers.MainMenuRenderer"
+					click="lstMenu_clickHandler(event)">
+			</s:List>
+		</s:Panel>	
+	</s:VGroup>
+</s:VGroup>

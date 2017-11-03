@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  width="100%" 
+		  height="100%"
+		  gap="0"
+		  preinitialize="vgroup1_preinitializeHandler(event)"
+		  creationComplete="vgroup1_creationCompleteHandler(event)" 
+		  xmlns:system="components.system.*" xmlns:components="flatspark.components.*">
+	<fx:Script>
+		<![CDATA[
+			import com.distriqt.extension.dialog.Dialog;
+			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.PickerDialogView;
+			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.builders.PickerDialogBuilder;
+			import com.distriqt.extension.dialog.events.DialogViewEvent;
+			import com.distriqt.extension.dialog.objects.DialogAction;
+			import com.distriqt.extension.nativewebview.WebView;
+			
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			import spark.events.TextOperationEvent;
+			
+			import classes.Globals;
+			import classes.Model.BatchQuery;
+			import classes.Model.Database;
+			import classes.Utils.QueryConstructor;
+			
+			import events.MainNavEvent;
+			import events.Model.QueryEvent;
+			import events.custom.CheckEvent;
+			
+			import flatspark.enums.BrandColorEnum;
+			import flatspark.enums.ButtonSizeEnum;
+			import flatspark.enums.TextInputSizeEnum;
+
+			[Bindable] private var acMessages:ArrayCollection = new ArrayCollection();
+			private var webView:WebView;
+			private var acCoeff:ArrayCollection = new ArrayCollection();
+			private var rrp:Number = 0;
+			protected var _price:String = "";
+			protected var _coeff:String = ""; 
+			protected var _promo:String = "";
+			private var saveFinished:Boolean = false;
+			
+			protected function vgroup1_preinitializeHandler(event:FlexEvent):void
+			{
+				stage.setAspectRatio(StageAspectRatio.PORTRAIT);
+				this.addEventListener(MainNavEvent.BACK_EVENT, mainNavigationBackListener,false,0,true);
+			}			
+			
+			protected function vgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				Globals.backFromPriceEntryForm = true;		
+				txtPrice.text = Globals.PRO_PRICE;
+				btnCoeff.label = Globals.PRO_COEFF;
+				
+				lblHint.text = "Введите актуальную цену для данного продукта в поле [Цена]. " +
+					"Выберите коэффициент из списка. " +
+					"В случае, если для данного продукта проводится промо-акция, введите в поле [Промо для продукта] данные по акции. " +
+					"Если данный продукт отсутствует в магазине, нажмите кнопку [ПРОДУКТ ОТСУТСТВУЕТ]";
+				
+				Database.addEventListener(QueryEvent.DATA_LOADED, productDataLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_PRODUCTS WHERE PRO_NAME = '" + Globals.PRO_NAME + "'");
+			}
+			private function productDataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, productDataLoaded );
+				this.VEN_NAME.text = "Вендор: " + e.data.getItemAt(0).VEN_NAME;
+				this.PRT_NAME.text = "Тип: " + e.data.getItemAt(0).PRT_NAME;
+				try
+				{
+					rrp = Number(e.data.getItemAt(0).PRO_BASEPRICE);
+				} 
+				catch (err:Error) { trace("RRP conversion error"); }
+				
+				this.img.source = File.documentsDirectory.resolvePath(Globals.MEDIA_FILES_FOLDER_PATH + "/" + e.data.getItemAt(0).PRO_PHOTO).url;
+			}
+
+			protected function txtPrice_changeHandler(event:TextOperationEvent):void
+			{
+				lblPriceFormatted.text = PrepForDisplay.format(txtPrice.text) + " KZT";				
+			}
+			
+			protected function btnCoeff_clickHandler(event:MouseEvent):void
+			{
+				Database.addEventListener(QueryEvent.DATA_LOADED, coeffDataLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_COEFFICIENT WHERE COE_CHA_CODE = '" + Globals.SAL_CHA_CODE + "' ORDER BY COE_NAME");
+			}
+			private function coeffDataLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, coeffDataLoaded );
+				
+				if (e.data.length > 0) {
+					acCoeff = e.data;
+					
+					var arrCoeff:Array = new Array();				
+					for (var i:int=0; i < e.data.length; i++)
+					{
+						arrCoeff.push(e.data.getItemAt(i).COE_NAME);
+					}
+					
+					var picker:PickerDialogView = Dialog.service.create(
+						new PickerDialogBuilder()
+						.setTitle( "Выберите коэффициент" )
+						.setCancelLabel("Отмена")
+						.setAcceptLabel("Выбрать")
+						.addColumn(arrCoeff)
+						.build()
+					);
+					
+					picker.addEventListener( DialogViewEvent.CLOSED, picker_closedHandler );
+					picker.addEventListener( DialogViewEvent.CANCELLED, picker_closedHandler );
+					picker.show();
+				} 
+				else 
+				{
+					Globals.showOkDialog("Ввод коэффициента","Для данной ТТ не загружен список коэффициентов. Пожалуйста, обратитесь к администратору системы");
+				}				
+			}
+			
+			
+			private function picker_closedHandler( event:DialogViewEvent ):void
+			{
+				trace( "COEFFICIENT picker closed ("+event.index+") -> [ " + event.indexes.join(",") + " ] " + event.values.join(",") );
+				
+				if (event.index == 1) {
+					btnCoeff.label = event.values[0];
+				}
+				
+				var picker:PickerDialogView = PickerDialogView(event.currentTarget);
+				picker.removeEventListener( DialogViewEvent.CLOSED, picker_closedHandler );
+				picker.removeEventListener( DialogViewEvent.CANCELLED, picker_closedHandler );
+				picker.dispose();
+			}
+			
+			
+			// SAVE FORM
+			protected function btnSave_clickHandler(event:MouseEvent):void
+			{
+				//dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false));
+				var prodPrice:String = txtPrice.text;
+				var coeff:String = btnCoeff.label;
+				var promo:String = txtPromo.text;
+				var allowSave:Boolean = true;	
+				var errMsgArray:Array = new Array();
+				
+				if (prodPrice.length == 0) {
+					allowSave = false;
+					errMsgArray.push("Поле [Цена] должно быть заполнено!");
+				}
+				
+				if (prodPrice == "0") {
+					allowSave = false;
+					errMsgArray.push("Поле [Цена] должно быть больше 0!");
+				}
+				
+				if (coeff == "Выберите") {
+					allowSave = false;
+					errMsgArray.push("Необходимо установить значение коэффициента!");
+				}
+				
+				if (allowSave) 
+				{	
+					// find coeff code
+					for (var i:int=0; i<acCoeff.length; i++) {
+						if (coeff == acCoeff.getItemAt(i).COE_NAME) {
+							Globals.PRO_COEFF_CODE = acCoeff.getItemAt(i).COE_CODE;
+						}
+					}					
+					// check for RRP deviations
+					if ((rrp > 0) && (Math.ceil((Number(prodPrice)/rrp)*100) < 81) && (Globals.shouldTakePricePhoto))
+					{
+							var alert:DialogView = Dialog.service.create( 
+								new AlertBuilder()
+								.setTitle( "Отклонение от RRP" )
+								.setMessage( "Зафиксировано значительное отклонение от рекомендованной цены. Пожалуйста, сделайте фото ценника" )
+								.addOption( "OK", DialogAction.STYLE_POSITIVE )
+								.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+								.build()
+							);
+							alert.addEventListener( DialogViewEvent.CLOSED, rrpAlert_closedHandler );
+							alert.show();
+					} 
+					else 
+					{					
+						savePriceDocument(prodPrice,Globals.PRO_COEFF_CODE,promo);
+					}					
+				} else {
+					Globals.showOkDialog("Проверьте поля",errMsgArray.join("\n"));
+				}
+			}
+			
+			private function rrpAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) 
+				{ 
+					// move to make photo screen
+					Globals.PRO_PRICE = txtPrice.text;
+					Globals.PRO_COEFF = btnCoeff.label;
+					dispatchEvent(new MainNavEvent(MainNavEvent.NEXT_EVENT,true,false,"907"));
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, rrpAlert_closedHandler );
+				alert.dispose();
+			}
+			
+
+
+			protected function btnNoProduct_clickHandler(event:MouseEvent):void
+			{
+				var alert:DialogView = Dialog.service.create( 
+					new AlertBuilder()
+					.setTitle( "Продукт отсутствует" )
+					.setMessage( "Нажмите [OK] если данный продукт отсутствует в магазине" )
+					.addOption( "OK", DialogAction.STYLE_POSITIVE )
+					.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+					.build()
+				);
+				alert.addEventListener( DialogViewEvent.CLOSED, noProductAlert_closedHandler );
+				alert.show();				
+			}
+			private function noProductAlert_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) 
+				{ 
+					savePriceDocument("0","","");
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, noProductAlert_closedHandler );
+				alert.dispose();
+			}
+			
+			private function savePriceDocument(price:String, coeff:String, promo:String):void
+			{
+				Globals.loadingShow("","Сохранение данных...");
+				
+				_price = price;
+				_coeff = coeff;
+				_promo = promo;
+
+				Database.addEventListener(QueryEvent.DATA_LOADED, checkPriceInDbLoaded, false, 0, true);
+				Database.init("SELECT * FROM ST_PRICE_DOCUMENT WHERE PRD_PRO_CODE = '" + Globals.PRO_CODE + "' AND PRD_VISIT_ID = '" + Globals.SUB_VIS_NUMBER + "';");	
+			}
+			private function checkPriceInDbLoaded(e:QueryEvent):void
+			{
+				Database.removeEventListener(QueryEvent.DATA_LOADED, checkPriceInDbLoaded );
+				
+				var adjArr:ArrayCollection = new ArrayCollection();
+				var bq0:BatchQuery = new BatchQuery();		
+
+				if (e.data.length > 0) 
+				{
+					bq0.query = QueryConstructor.buildUpdatePriceDocument(_price,_coeff,_promo);
+				}
+				else 
+				{
+					bq0.query = QueryConstructor.buildInsertPriceDocument(_price,_coeff,_promo);
+				}
+				trace("PriceEntryForm Save Document: " + bq0.query);
+				adjArr.addItem(bq0);
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, savePriceDocumentResult);
+				Database.addEventListener(CheckEvent.ADJUST_EVENT, savePriceDocumentResult, false, 0, true);
+				Database.ADJUST(adjArr);
+			}
+			private function savePriceDocumentResult(e:CheckEvent):void
+			{
+				Database.removeEventListener(CheckEvent.ADJUST_EVENT, savePriceDocumentResult);
+				Globals.loadingClose();
+				
+				if (e.data > 0) 
+				{	
+					Dialog.service.toast("Данные сохранены");					
+				}	
+				else	
+				{
+					Globals.showOkDialog("Ошибка","Ошибка вставки данных по продукту: "  + e.text);
+				}
+				saveFinished = true;
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,false,""));
+			}
+			
+			
+			/* ===============================================			
+			EXIT CONFIRMATION, UPDATE VISIT AND PART SYNC			
+			=================================================*/	
+			private function mainNavigationBackListener(event:MainNavEvent):void
+			{
+				if ((txtPrice.text.length > 0) && (!saveFinished))
+				{
+					trace("*** PRICE ENTRY FORM BACK LISTENER");
+					event.stopImmediatePropagation();
+					event.stopPropagation();
+					event.preventDefault();
+					
+					var alert:DialogView = Dialog.service.create( 
+						new AlertBuilder()
+						.setTitle( "Завершить ввод цены" )
+						.setMessage( "Есть несохраненные изменения! Нажмите ОК для выхода из формы ввода цены без сохранения введенных данных" )
+						.addOption( "OK", DialogAction.STYLE_POSITIVE )
+						.addOption( "Отмена", DialogAction.STYLE_CANCEL )
+						.build()
+					);
+					alert.addEventListener( DialogViewEvent.CLOSED, exitPriceEntry_closedHandler );
+					alert.show();
+				}
+				/*
+				else 
+				{
+					exitForm();
+				}
+				*/
+			}
+			private function exitPriceEntry_closedHandler( event:DialogViewEvent ):void
+			{
+				if (event.index == 1) 
+				{ 
+					exitForm();
+				}
+				var alert:DialogView = DialogView(event.currentTarget);
+				alert.removeEventListener( DialogViewEvent.CLOSED, exitPriceEntry_closedHandler );
+				alert.dispose();
+			}
+			
+			private function exitForm():void
+			{
+				this.removeEventListener(MainNavEvent.BACK_EVENT, mainNavigationBackListener);
+				dispatchEvent(new MainNavEvent(MainNavEvent.BACK_EVENT,true,true));
+			}
+			
+		]]>
+	</fx:Script>
+		
+	<fx:Declarations>
+		<!-- Declare and define parameters for the NumberFormatter.-->
+		<s:NumberFormatter id="PrepForDisplay"
+						   groupingPattern="###"
+						   groupingSeparator=" "
+						   useGrouping="true" />
+	</fx:Declarations>
+	
+	<system:TsaActionBar id="tsaActionBar" titleText="{Globals.PRO_NAME}" backVisible="true" />
+	
+	<s:VGroup width="100%" height="10%" paddingLeft="5" paddingRight="5" paddingTop="5" verticalAlign="middle">
+		<components:ButtonIcon id="btnNoProduct"
+							   label="ПРОДУКТ ОТСУТСТВУЕТ"
+							   width="100%"
+							   height="100%"
+							   brand="{BrandColorEnum.Danger}"
+							   click="btnNoProduct_clickHandler(event)"/>
+	</s:VGroup>
+	
+	<s:VGroup width="100%" height="75%" padding="5">
+		
+		<s:Panel title="Информация о продукте" width="100%" height="40%">
+			<s:HGroup width="100%" height="100%" verticalAlign="middle">
+				<s:Image id="img" width="50%" height="100%" scaleMode="letterbox" smooth="true" smoothingQuality="high" />
+				<s:VGroup height="100%" width="50%" verticalAlign="middle" padding="5">
+					<s:Label text="{Globals.PRO_NAME}" fontWeight="bold" width="100%" />
+					<s:Label id="VEN_NAME" width="100%" />
+					<s:Label id="PRT_NAME" width="100%" />
+				</s:VGroup>
+			</s:HGroup>
+		</s:Panel>	
+		
+		<s:Label id="lblPriceFormatted" 
+				 fontWeight="bold" width="100%" textAlign="right" text="..." />
+		
+			
+		<s:HGroup width="100%" verticalAlign="middle">
+			<s:Label width="50%" height="100%" verticalAlign="middle" fontWeight="bold" text="Введите цену" />
+			<s:TextInput id="txtPrice" 						 
+						 restrict="0-9"
+						 maxChars="8" 
+						 softKeyboardType="number"
+						 width="50%" 
+						 height="{TextInputSizeEnum.Large}" 
+						 textAlign="right"
+						 text="{Globals.PRO_PRICE}"
+						 prompt="Цена..."						 
+						 change="txtPrice_changeHandler(event)"/>
+		</s:HGroup> 	
+		
+		<s:HGroup width="100%" verticalAlign="middle">
+			<s:Label width="50%" height="100%" verticalAlign="middle" fontWeight="bold" text="Коэффициент" />
+			<components:ButtonIcon id="btnCoeff"
+								   label="{Globals.PRO_COEFF}"
+								   width="50%"
+								   height="{ButtonSizeEnum.Large}"
+								   brand="{BrandColorEnum.Info}"
+								   click="btnCoeff_clickHandler(event)"/>
+		</s:HGroup>	
+		
+		<s:TextInput id="txtPromo" 
+					 width="100%" 
+					 autoCapitalize="all"
+					 prompt="Промо для продукта {Globals.PRO_NAME}..." />
+		<s:Label id="lblHint" 
+				 width="100%" paddingBottom="5" paddingTop="5"  fontStyle="italic" fontSize="12" />
+		
+	</s:VGroup>
+	
+	<s:VGroup width="100%" height="15%" padding="5" verticalAlign="middle">
+		<components:ButtonIcon id="btnSave"
+							   label="СОХРАНИТЬ ДАННЫЕ"
+							   width="100%"
+							   height="100%"
+							   brand="{BrandColorEnum.Success}"
+							   click="btnSave_clickHandler(event)" />
+	</s:VGroup>	
+	
+</s:VGroup> 
