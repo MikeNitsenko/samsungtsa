@@ -32,6 +32,8 @@ package
 			/* Caltrain Times app way - much better deals with fonts
 			https://github.com/renaun/CaltrainTimes/blob/master/src/com/renaun/mobile/dpi/CustomDPIProvider.as */
 			
+			// new comment to see changes in GIT
+			
 			var screenX:Number = Capabilities.screenResolutionX;
 			var screenY:Number = Capabilities.screenResolutionY;
 			var pixelCheck:Number = screenX * screenY;
